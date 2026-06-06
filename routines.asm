@@ -22,7 +22,7 @@
 ;        .byte 'HELLO FROM STRING ONE!',0
 ;        .endl
 
-
+;======================================================================
         .proc print_string
         ldy #0
 loop:
@@ -43,7 +43,7 @@ exit:
 
 stop:
         jmp stop                        ; GOTO stop                   (infinite loop = program halts here)
-
+;======================================================================
 
 ; print a character
 ; Assumptions
@@ -61,6 +61,37 @@ stop:
         rts             ; RETURN                      (pops OS address from stack and jumps there, OS prints character in A, then returns to main)
         .endp           ; end of putchar procedure
 
+;========================================================================================
+        ; print both digits in base 10, from left to right
+        ; strategy is to continue subracting 10 from our hex value until it is less than 10
+        ; once we are there we now have the "tens digit" in X and the "ones digit" in A
+        ; Assumtions: A contains the hex value of the number to print
+
+        .proc printDecimal
+        ldx #0
+checkCount:
+        ; if A < 10   → carry = 0  → bcc branches   (carry CLEAR)
+        ; if A >= 10  → carry = 1  → bcs branches   (carry SET)
+        cmp #10             ; Does A = 10?
+        bcc doneCounting    ; branch if carry is cleared
+        sec                 ; set carry
+        sbc #10             ; A = A - 10
+        inx                 ; X = X + 1
+        bne checkCount
+
+doneCounting:   
+        pha                 ; push(A) (push A onto the stack)
+        txa                 ; A = X
+        clc
+        adc #offset_to_char
+        jsr putchar
+
+        pla                 ; A = pop() (pop the next value off the stack)
+        clc 
+        adc #offset_to_char
+        jsr putchar
+        .endp
+;==================================================================================================
 
 ; plot a point (x,y)
 ; Step 1: Find which ROW we're on
@@ -194,7 +225,7 @@ done_shift:
 
         rts
         .endp
-
+;======================================================================
 
 ; =====================================================================
 ; DATA
