@@ -1,6 +1,107 @@
 ; routines.asm
         org $3000               ; routines live at $3000
 
+
+
+
+; =====================================================================
+; fightAttract
+; Call this every frame in your stop loop to prevent attract mode
+; from desaturating your colors
+; ON ENTRY: nothing
+; ON EXIT:  attract mode defeated for this frame
+;======================================================================
+        .proc fightAttract
+
+        ; defeat attract mode and set colors
+        mva #0    ATRACT
+        mva #$FF  ATRMSK
+
+        rts
+        .endp
+
+; =====================================================================
+; Clear the screen
+
+        .proc clearScreen
+
+; initialize pointer from SAVMSC
+        lda SAVMSC
+        sta scrptr_lo
+        lda SAVMSC+1
+        sta scrptr_hi
+
+; here we have a nested loop the iner loop will start at 0 and end at 255. 
+; When Y overflows from 255 to 0, bne does NOT branch (falls through)
+; because Y equals zero — exiting the inner loop into the outer loop.
+
+        ldx #30             ; X = 30 pages to clear
+        ldy #0              ; Y = byte index within page
+
+clearpage:
+        lda #$00
+        sta (scrptr_lo),y   ; write $00
+        iny                 ; next byte
+        bne clearpage       ; inner loop — 256 bytes
+
+        inc scrptr_hi       ; advance to next page
+        dex                 ; X = X - 1
+        bne clearpage       ; outer loop — 30 pages
+
+        rts
+        .endp
+
+
+; =====================================================================
+; Open Graphics Mode 8
+
+        .proc openGR8
+
+; =====================================================================
+; STEP 1: Close IOCB6
+; Good practice to close before opening — ensures clean state.
+; ON ENTRY: X must contain IOCB number × $10 ($60 for IOCB6)
+; ON ENTRY: ICCOM must contain the command ($0C = CLOSE)
+; ON EXIT:  IOCB6 is closed and ready to be reopened
+; =====================================================================
+        ldx #$60                    ; X = $60        (select IOCB6)
+        lda #$0C                    ; A = $0C        (CLOSE command)
+        sta ICCOM,x                 ; ICCOM = $0C    (store command in IOCB6)
+        jsr CIOV                    ; CALL CIOV      (execute the close)
+
+; =====================================================================
+; STEP 2: Open Graphics Mode 8
+; Fills in all IOCB6 fields then calls CIOV to execute the open.
+; CIO sets up the display list, allocates screen RAM, configures
+; ANTIC — everything needed for graphics mode automatically.
+; ON ENTRY: nothing required
+; ON EXIT:  GR.8 screen is active, SAVMSC points to screen RAM
+; =====================================================================
+        ldx #$60                    ; X = $60        (select IOCB6)
+        lda #$03                    ; A = $03        (OPEN command)
+        sta ICCOM,x                 ; ICCOM = $03    (store open command)
+        lda #<scrname               ; A = low byte of "S:" string address
+        sta ICBAL,x                 ; ICBAL = low byte (tell CIO device name location)
+        lda #>scrname               ; A = high byte of "S:" string address
+        sta ICBAH,x                 ; ICBAH = high byte
+        lda #$08                    ; A = $08        (graphics mode 8)
+        sta ICAX2,x                 ; ICAX2 = $08    (store graphics mode number)
+        lda #$0C                    ; A = $0C        (read/write access)
+        sta ICAX1,x                 ; ICAX1 = $0C    (store access mode)
+        jsr CIOV                    ; CALL CIOV      (execute open — sets up entire graphics mode!)
+
+; Step 3: Setup color registers
+; change COLPF1 to change pixel color
+
+        mva #$1E  $02C5     ; COLPF1 = yellow (foreground - pixel color)
+        mva #$00  $02C6     ; COLPF2 = black (background)
+        mva #$00  $02C8     ; COLBK  = black (border)
+
+        rts
+        .endp
+
+;=========================================================================================
+
 ; print a string
 ; Assumptions
 ; strptr_lo = low address of the string
@@ -77,7 +178,7 @@ checkCount:
         sec                 ; set carry
         sbc #10             ; A = A - 10
         inx                 ; X = X + 1
-        bne checkCount
+        jmp checkCount
 
 doneCounting:   
         pha                 ; push(A) (push A onto the stack)
