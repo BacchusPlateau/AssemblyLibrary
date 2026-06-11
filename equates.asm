@@ -21,6 +21,20 @@ save_hi     = $88       ; saved plotY × 8 high byte
 bitpos      = $89       ; bit position within byte (plotX mod 8) that our pixel lives in
 bitmask     = $8A       ; save our mask that we will use to turn ONLY our pixel on
 
+; drawLine variables
+x1      = $8D       ; start X low byte
+x1_hi   = $8E       ; start X high byte
+y1      = $8F       ; start Y
+x2      = $90       ; end X low byte
+x2_hi   = $91       ; end X high byte
+y2      = $92       ; end Y
+dx_lo   = $93       ; delta X low byte
+dx_hi   = $94       ; delta X high byte
+dy      = $95       ; delta Y
+err_lo  = $96       ; error accumulator low byte
+err_hi  = $97       ; error accumulator high byte
+
+
 ; GR.8 color registers
 COLPF1  = $02C5     ; foreground pixel color shadow
 COLPF2  = $02C6     ; background color shadow

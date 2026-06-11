@@ -77,6 +77,18 @@ clearpage:
 ; ON ENTRY: nothing required
 ; ON EXIT:  GR.8 screen is active, SAVMSC points to screen RAM
 ; =====================================================================
+
+
+;   Draw yellow pixels on the Atari 800XL in Graphics Mode 8
+;   Uses CIO (Central I/O) to open the graphics mode, then writes
+;   pixel data directly to screen RAM.
+;   GR.8:   320 pixels wide × 192 tall   1 bit per pixel     2 colors
+;   GR.8:   40 bytes × 192 rows = 7,680 bytes
+;   GR.8:   320 pixels ÷ 8 pixels per byte = 40 bytes per row
+;   GR.8 byte:  P P P P P P P P
+;               | | | | | | | |
+;               7 6 5 4 3 2 1 0   (8 pixels, 1 bit each, on or off)
+
         ldx #$60                    ; X = $60        (select IOCB6)
         lda #$03                    ; A = $03        (OPEN command)
         sta ICCOM,x                 ; ICCOM = $03    (store open command)
@@ -101,7 +113,172 @@ clearpage:
         .endp
 
 ;=========================================================================================
+; draw a line using Bresenham's algorithm
 
+        .proc drawLine
+
+        ; first step, compute:
+        ; dx = x2 - x1    (16-bit subtraction)
+        ; dy = y2 - y1    (8-bit subtraction)
+
+        lda y2          ; A = Y2
+        sec             ; set carry
+        sbc y1          ; A = A - Y1
+        sta dy          ; dy = A
+
+        lda x2          ; A = x2 (low byte)
+        sec             ; set carry
+        sbc x1          ; A = A - X1 (low byte)
+        sta dx_lo       ; save low byte, but do not re-set carry
+
+        lda x2_hi       ; A = X2 (high byte)
+        sbc x1_hi       ; A = A - X1 (high byte)
+        sta dx_hi       ; save high byte
+
+        ; check for vertical line (dx = 0)
+        lda dx_lo
+        ora dx_hi       ; OR low and high bytes together
+        bne not_vertical ; if result != 0, not vertical
+
+        ; handle vertical line
+        ; initialize position first!
+        lda x1
+        sta plotX_lo
+        lda x1_hi
+        sta plotX_hi
+        lda y1
+        sta plotY
+
+        ; just loop Y from y1 to y2
+vertical_loop:
+        lda plotX_lo    ; save plotX before plotPoint destroys it
+        pha
+        lda plotX_hi
+        pha
+        
+        jsr plotPoint
+        
+        pla             ; restore plotX
+        sta plotX_hi
+        pla
+        sta plotX_lo
+        
+        inc plotY
+        lda plotY
+        cmp y2
+        bne vertical_loop
+        
+        ; plot final point
+        lda plotX_lo
+        pha
+        lda plotX_hi
+        pha
+        jsr plotPoint
+        pla
+        sta plotX_hi
+        pla
+        sta plotX_lo
+        
+        rts
+
+not_vertical:
+        ; continue with normal Bresenham...
+
+        ; initialize current position to start point
+        lda x1          ; A = X1
+        sta plotX_lo    ; plotX_lo = A
+        lda x1_hi       ; A = X1_hi
+        sta plotX_hi    ; plotX_hi = A
+        lda y1          ; A = Y1
+        sta plotY       ; plotY = A
+
+        ; initialize error to 0
+        mva #0 err_lo           ; err_lo = 0
+        mva #0 err_hi           ; err_hi = 0
+
+lineloop:
+        ; save plotX before plotPoint destroys it
+        lda plotX_lo
+        pha
+        lda plotX_hi
+        pha
+
+        jsr plotPoint
+
+        ; restore plotX after plotPoint
+        pla
+        sta plotX_hi
+        pla
+        sta plotX_lo
+
+; add dy to error accumulator (16-bit + 8-bit addition)
+        lda err_lo              ; A = err_lo
+        clc                     ; clear carry
+        adc dy                  ; A += dy
+        sta err_lo              ; err_lo = A
+        lda err_hi              ; A = err_hi
+        adc #0                  ; propagate carry trick. if the carry was set it gets added to the high byte
+        sta err_hi              ; err_hi = A
+
+        ; check if error * 2 >= dx
+        ; compute error + error (16-bit)
+        lda err_lo              ; A = err_lo
+        clc                     ; clear carry
+        adc err_lo              ; A += err_lo (err_lo * 2)
+        sta temp_lo             ; temp_lo = A
+        lda err_hi              ; A = err_hi
+        adc err_hi              ; A += err_hi ((err_hi * 2) + carry)
+        sta temp_hi             ; temp_hi = A
+
+        ; compare temp (error*2) to dx
+        ; 16-bit comparison: check high byte first, then low byte
+        lda temp_hi     ; A = temp_hi
+        cmp dx_hi       ; Does temp_hi == dx_hi? 
+        bcc skip_y      ; temp_hi < dx_hi, no Y step needed (branch if carry is clear)
+        bne do_y_step   ; temp_hi > dx_hi, Y step needed (branch if not equal)
+        lda temp_lo     ; A = temp_lo (high bytes equal, check low bytes (if we got here, high bytes are equal))
+        cmp dx_lo       ; Does temp_lo == dx_lo?
+        bcc skip_y      ; temp_lo < dx_lo, no Y step needed
+
+do_y_step:
+        inc plotY       ; y = y + 1
+
+        ; error = error - dx (16-bit subtraction)
+        lda err_lo      ; A = err_lo
+        sec             ; set the carry
+        sbc dx_lo       ; A -= dx_lo
+        sta err_lo      ; err_lo = A
+        lda err_hi      ; A = err_hi
+        sbc dx_hi       ; A -= dex_hi
+        sta err_hi      ; err_hi = A
+
+skip_y:
+        ; advance x (16-bit increment)
+        inc plotX_lo            ; plotX_lo++
+        bne lineloop_check      ; if no overflow, check if done 
+                                ; if plotX_lo != 0 JUMP FORWARD to lineloop_check
+        inc plotX_hi            ; handle overflow from low to high byte
+                                ; only reaches here if plotX_lo overflowed to 0
+
+lineloop_check:
+        ; are we done? compare plotX to x2
+        lda plotX_lo            ; A = plotX_lo
+        cmp x2                  ; test: A = X2 ?
+        bne lineloop            ; not done, keep going
+                                ; if plotX_lo != x2 JUMP BACK to lineloop
+        lda plotX_hi            ; A = plotX_hi
+        cmp x2_hi               ; test: A = x2_hi ?
+        bne lineloop            ; not done, keep going
+                                ; if plotX_hi != x2_hi JUMP BACK to lineloop
+                                ; if both match we fall through - done!
+
+        
+
+        rts
+        .endp
+
+
+;=========================================================================================
 ; print a string
 ; Assumptions
 ; strptr_lo = low address of the string

@@ -27,29 +27,41 @@
 
         jsr clearScreen
 
-        ; upper left
-        mva #0    plotX_lo
-        mva #0    plotX_hi
-        mva #0    plotY
-        jsr plotPoint
+         ; top edge
+        mva #0    x1
+        mva #0    x1_hi
+        mva #0    y1
+        mva #$3F  x2
+        mva #$01  x2_hi
+        mva #0    y2
+        jsr drawLine
 
-        ; upper right
-        mva #$3F  plotX_lo
-        mva #$01  plotX_hi
-        mva #0    plotY
-        jsr plotPoint
+        ; bottom edge
+        mva #0    x1
+        mva #0    x1_hi
+        mva #191  y1
+        mva #$3F  x2
+        mva #$01  x2_hi
+        mva #191  y2
+        jsr drawLine
 
-        ; lower left
-        mva #0    plotX_lo
-        mva #0    plotX_hi
-        mva #191  plotY
-        jsr plotPoint
+        ; left edge
+        mva #0    x1
+        mva #0    x1_hi
+        mva #0    y1
+        mva #0    x2
+        mva #0    x2_hi
+        mva #191  y2
+        jsr drawLine
 
-        ; lower right
-        mva #$3F  plotX_lo
-        mva #$01  plotX_hi
-        mva #191  plotY
-        jsr plotPoint
+        ; right edge
+        mva #$3F  x1
+        mva #$01  x1_hi
+        mva #0    y1
+        mva #$3F  x2
+        mva #$01  x2_hi
+        mva #191  y2
+        jsr drawLine
 
 
 halt:

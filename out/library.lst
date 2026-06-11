@@ -25,55 +25,69 @@ Source: equates.asm
     21 = 0089			bitpos      = $89       ; bit position within byte (plotX mod 8) that our pixel lives in
     22 = 008A			bitmask     = $8A       ; save our mask that we will use to turn ONLY our pixel on
     23
-    24 				; GR.8 color registers
-    25 = 02C5			COLPF1  = $02C5     ; foreground pixel color shadow
-    26 = 02C6			COLPF2  = $02C6     ; background color shadow
-    27 = 02C8			COLBK   = $02C8     ; border color shadow
-    28
-    29 				; =====================================================================
-    30 				; CIO (Central I/O) constants
-    31 				; CIO is the Atari OS I/O system. We use it to open graphics mode.
-    32 				; Each I/O channel uses an IOCB (I/O Control Block) — a fixed block
-    33 				; of memory containing command, device, buffer address, and aux bytes.
-    34 				; We use IOCB6 (base address $0360) for graphics.
-    35 				; X register = $60 tells CIOV which IOCB to use (IOCB6).
-    36 				; =====================================================================
-    37 = E456			CIOV    = $E456     ; OS CIO entry point — call jsr CIOV to execute
-    38 = 0342			ICCOM   = $0342     ; IOCB6 command register
-    39 				                    ;   $03 = OPEN   (open a device)
-    40 				                    ;   $0C = CLOSE  (close a device)
-    41 = 0344			ICBAL   = $0344     ; IOCB6 buffer address low byte
-    42 				                    ;   for OPEN: points to device name string "S:"
-    43 = 0345			ICBAH   = $0345     ; IOCB6 buffer address high byte
-    44 				                    ;   together with ICBAL forms 16-bit pointer to "S:"
-    45 = 034A			ICAX1   = $034A     ; IOCB6 auxiliary byte 1
-    46 				                    ;   for OPEN: $0C = read/write access mode
-    47 = 034B			ICAX2   = $034B     ; IOCB6 auxiliary byte 2
-    48 				                    ;   for OPEN: graphics mode number (8 = GR.8)
-    49
+    24 				; drawLine variables
+    25 = 008D			x1      = $8D       ; start X low byte
+    26 = 008E			x1_hi   = $8E       ; start X high byte
+    27 = 008F			y1      = $8F       ; start Y
+    28 = 0090			x2      = $90       ; end X low byte
+    29 = 0091			x2_hi   = $91       ; end X high byte
+    30 = 0092			y2      = $92       ; end Y
+    31 = 0093			dx_lo   = $93       ; delta X low byte
+    32 = 0094			dx_hi   = $94       ; delta X high byte
+    33 = 0095			dy      = $95       ; delta Y
+    34 = 0096			err_lo  = $96       ; error accumulator low byte
+    35 = 0097			err_hi  = $97       ; error accumulator high byte
+    36
+    37
+    38 				; GR.8 color registers
+    39 = 02C5			COLPF1  = $02C5     ; foreground pixel color shadow
+    40 = 02C6			COLPF2  = $02C6     ; background color shadow
+    41 = 02C8			COLBK   = $02C8     ; border color shadow
+    42
+    43 				; =====================================================================
+    44 				; CIO (Central I/O) constants
+    45 				; CIO is the Atari OS I/O system. We use it to open graphics mode.
+    46 				; Each I/O channel uses an IOCB (I/O Control Block) — a fixed block
+    47 				; of memory containing command, device, buffer address, and aux bytes.
+    48 				; We use IOCB6 (base address $0360) for graphics.
+    49 				; X register = $60 tells CIOV which IOCB to use (IOCB6).
     50 				; =====================================================================
-    51 				; Screen RAM pointer
-    52 				; After CIO opens GR.8, the OS stores the address of screen RAM
-    53 				; in SAVMSC (two bytes). $58 = low byte, $59 = high byte.
-    54 				; On our 800XL PAL system screen RAM ends up at $B060.
-    55 				; =====================================================================
-    56 = 0058			SAVMSC  = $58       ; zero page address — low byte of screen RAM address
-    57 				                    ; $59 automatically contains the high byte
-    58
-    59 				; =====================================================================
-    60 				; Attract mode constants
-    61 				; The Atari OS has an attract mode that kicks in after inactivity
-    62 				; to prevent screen burn-in. It does this by desaturating all colors
-    63 				; making everything appear as shades of grey/blue.
-    64 				; We must continuously reset these in our main loop to keep colors!
-    65 				; =====================================================================
-    66 = 004D			ATRACT  = $4D       ; attract mode counter — OS increments this each frame
-    67 				                    ; when it reaches a threshold attract mode activates
-    68 				                    ; we keep writing 0 to prevent it from activating
-    69 = 004E			ATRMSK  = $4E       ; attract mode color mask
-    70 				                    ; OS ANDs all colors with this value
-    71 				                    ; $FE strips hue leaving only luminance (grey/blue)
-    72 				                    ; $FF = full color (no masking) — what we want
+    51 = E456			CIOV    = $E456     ; OS CIO entry point — call jsr CIOV to execute
+    52 = 0342			ICCOM   = $0342     ; IOCB6 command register
+    53 				                    ;   $03 = OPEN   (open a device)
+    54 				                    ;   $0C = CLOSE  (close a device)
+    55 = 0344			ICBAL   = $0344     ; IOCB6 buffer address low byte
+    56 				                    ;   for OPEN: points to device name string "S:"
+    57 = 0345			ICBAH   = $0345     ; IOCB6 buffer address high byte
+    58 				                    ;   together with ICBAL forms 16-bit pointer to "S:"
+    59 = 034A			ICAX1   = $034A     ; IOCB6 auxiliary byte 1
+    60 				                    ;   for OPEN: $0C = read/write access mode
+    61 = 034B			ICAX2   = $034B     ; IOCB6 auxiliary byte 2
+    62 				                    ;   for OPEN: graphics mode number (8 = GR.8)
+    63
+    64 				; =====================================================================
+    65 				; Screen RAM pointer
+    66 				; After CIO opens GR.8, the OS stores the address of screen RAM
+    67 				; in SAVMSC (two bytes). $58 = low byte, $59 = high byte.
+    68 				; On our 800XL PAL system screen RAM ends up at $B060.
+    69 				; =====================================================================
+    70 = 0058			SAVMSC  = $58       ; zero page address — low byte of screen RAM address
+    71 				                    ; $59 automatically contains the high byte
+    72
+    73 				; =====================================================================
+    74 				; Attract mode constants
+    75 				; The Atari OS has an attract mode that kicks in after inactivity
+    76 				; to prevent screen burn-in. It does this by desaturating all colors
+    77 				; making everything appear as shades of grey/blue.
+    78 				; We must continuously reset these in our main loop to keep colors!
+    79 				; =====================================================================
+    80 = 004D			ATRACT  = $4D       ; attract mode counter — OS increments this each frame
+    81 				                    ; when it reaches a threshold attract mode activates
+    82 				                    ; we keep writing 0 to prevent it from activating
+    83 = 004E			ATRMSK  = $4E       ; attract mode color mask
+    84 				                    ; OS ANDs all colors with this value
+    85 				                    ; $FE strips hue leaving only luminance (grey/blue)
+    86 				                    ; $FF = full color (no masking) — what we want
      2 				        icl 'routines.asm'
 Source: routines.asm
      1 				; routines.asm
@@ -92,7 +106,7 @@ Source: routines.asm
     14 				        .proc fightAttract
     15
     16 				        ; defeat attract mode and set colors
-    17 FFFF> 3000-3116> A9 00 +         mva #0    ATRACT
+    17 FFFF> 3000-31D0> A9 00 +         mva #0    ATRACT
     18 3004 A9 FF 85 4E		        mva #$FF  ATRMSK
     19
     20 3008 60			        rts
@@ -155,265 +169,442 @@ Source: routines.asm
     77 				; ON ENTRY: nothing required
     78 				; ON EXIT:  GR.8 screen is active, SAVMSC points to screen RAM
     79 				; =====================================================================
-    80 302C A2 60		        ldx #$60                    ; X = $60        (select IOCB6)
-    81 302E A9 03		        lda #$03                    ; A = $03        (OPEN command)
-    82 3030 9D 42 03		        sta ICCOM,x                 ; ICCOM = $03    (store open command)
-    83 3033 A9 14		        lda #<scrname               ; A = low byte of "S:" string address
-    84 3035 9D 44 03		        sta ICBAL,x                 ; ICBAL = low byte (tell CIO device name location)
-    85 3038 A9 31		        lda #>scrname               ; A = high byte of "S:" string address
-    86 303A 9D 45 03		        sta ICBAH,x                 ; ICBAH = high byte
-    87 303D A9 08		        lda #$08                    ; A = $08        (graphics mode 8)
-    88 303F 9D 4B 03		        sta ICAX2,x                 ; ICAX2 = $08    (store graphics mode number)
-    89 3042 A9 0C		        lda #$0C                    ; A = $0C        (read/write access)
-    90 3044 9D 4A 03		        sta ICAX1,x                 ; ICAX1 = $0C    (store access mode)
-    91 3047 20 56 E4		        jsr CIOV                    ; CALL CIOV      (execute open — sets up entire graphics mode!)
-    92
-    93 				; Step 3: Setup color registers
-    94 				; change COLPF1 to change pixel color
-    95
-    96 304A A9 1E 8D C5 02	        mva #$1E  $02C5     ; COLPF1 = yellow (foreground - pixel color)
-    97 304F A9 00 8D C6 02	        mva #$00  $02C6     ; COLPF2 = black (background)
-    98 3054 A9 00 8D C8 02	        mva #$00  $02C8     ; COLBK  = black (border)
-    99
-   100 3059 60			        rts
-   101 				        .endp
-   102
-   103 				;=========================================================================================
+    80
+    81
+    82 				;   Draw yellow pixels on the Atari 800XL in Graphics Mode 8
+    83 				;   Uses CIO (Central I/O) to open the graphics mode, then writes
+    84 				;   pixel data directly to screen RAM.
+    85 				;   GR.8:   320 pixels wide × 192 tall   1 bit per pixel     2 colors
+    86 				;   GR.8:   40 bytes × 192 rows = 7,680 bytes
+    87 				;   GR.8:   320 pixels ÷ 8 pixels per byte = 40 bytes per row
+    88 				;   GR.8 byte:  P P P P P P P P
+    89 				;               | | | | | | | |
+    90 				;               7 6 5 4 3 2 1 0   (8 pixels, 1 bit each, on or off)
+    91
+    92 302C A2 60		        ldx #$60                    ; X = $60        (select IOCB6)
+    93 302E A9 03		        lda #$03                    ; A = $03        (OPEN command)
+    94 3030 9D 42 03		        sta ICCOM,x                 ; ICCOM = $03    (store open command)
+    95 3033 A9 CE		        lda #<scrname               ; A = low byte of "S:" string address
+    96 3035 9D 44 03		        sta ICBAL,x                 ; ICBAL = low byte (tell CIO device name location)
+    97 3038 A9 31		        lda #>scrname               ; A = high byte of "S:" string address
+    98 303A 9D 45 03		        sta ICBAH,x                 ; ICBAH = high byte
+    99 303D A9 08		        lda #$08                    ; A = $08        (graphics mode 8)
+   100 303F 9D 4B 03		        sta ICAX2,x                 ; ICAX2 = $08    (store graphics mode number)
+   101 3042 A9 0C		        lda #$0C                    ; A = $0C        (read/write access)
+   102 3044 9D 4A 03		        sta ICAX1,x                 ; ICAX1 = $0C    (store access mode)
+   103 3047 20 56 E4		        jsr CIOV                    ; CALL CIOV      (execute open — sets up entire graphics mode!)
    104
-   105 				; print a string
-   106 				; Assumptions
-   107 				; strptr_lo = low address of the string
-   108 				; strptr_hi = high address of the string
-   109 				;       together we have a 16-bit address of the string
-   110
-   111 				; Y = index of current character to process, starts at 0
-   112 				; example calling code:
-   113 				;       mva #1 csrhinh                  ; hide the cursor
-   114 				;        mva #6 rowcrs                   ; set output row
-   115 				;        mva #10 colcrs                  ; set output column
-   116 				;        
-   117 				;        mva #<string1 strptr_lo         ; low byte of string1 address
-   118 				;        mva #>string1 strptr_hi         ; high byte o f string1 address
-   119 				;        jsr print_string                ; print the string
-   120 				;
-   121 				;========= don't forget you'll need data
-   122 				;       .local string1
-   123 				;        .byte 'HELLO FROM STRING ONE!',0
-   124 				;        .endl
-   125
-   126 				;======================================================================
-   127 305A			        .proc print_string
-   128 305A A0 00		        ldy #0
-   129 305C			loop:
-   130 305C B1 8B		        lda (strptr_lo),y               ; with an offset of Y bytes, grab the byte at the 16-bit address
-   131 305E C9 00		        cmp #0                          ; test if we found the 0 string terminator: A == 0?   
-   132 3060 F0 0D		        beq exit                        ; if true, branch to exit
-   133 3062 98			        tya                             ; A = Y
-   134 3063 48			        pha                             ; push A onto the stack
-   135 3064 B1 8B		        lda (strptr_lo),y               ; re-fetch current byte of string
-   136 3066 20 73 30		        jsr putchar                     ; call putchar to write a character out
-   137 3069 68			        pla                             ; A = pop stack
-   138 306A A8			        tay                             ; Y = A
-   139 306B C8			        iny                             ; Y = Y + 1
-   140 306C 4C 5C 30		        jmp loop                        ; GOTO loop
-   141 306F			exit:
-   142 306F 60			        rts                             ; exit subroutine
-   143 				        .endp
-   144
-   145 3070			stop:
-   146 3070 4C 70 30		        jmp stop                        ; GOTO stop                   (infinite loop = program halts here)
-   147 				;======================================================================
-   148
-   149 				; print a character
-   150 				; Assumptions
-   151 				; 1. the character is in register A
-   152 				; 2. the character has been converted to ATASCII
-   153 				; 3. before calling, save values of X and Y registers
-   154
-   155 3073			        .proc putchar
-   156 3073 AA			        tax             ; X = A                       (save character from A into X because A is about to be clobbered)
-   157 3074 AD 47 03		        lda putchar_ptr+1 ; A = memory[$347]          (load high byte of OS print routine address)
-   158 3077 48			        pha             ; push A onto stack            (high byte on stack, will be popped second by rts)
-   159 3078 AD 46 03		        lda putchar_ptr ; A = memory[$346]            (load low byte of OS print routine address)
-   160 307B 48			        pha             ; push A onto stack            (low byte on stack, will be popped first by rts)
-   161 307C 8A			        txa             ; A = X                       (restore original character back into A because OS print routine expects character value in A)
-   162 307D 60			        rts             ; RETURN                      (pops OS address from stack and jumps there, OS prints character in A, then returns to main)
-   163 				        .endp           ; end of putchar procedure
-   164
-   165 				;========================================================================================
-   166 				        ; print both digits in base 10, from left to right
-   167 				        ; strategy is to continue subracting 10 from our hex value until it is less than 10
-   168 				        ; once we are there we now have the "tens digit" in X and the "ones digit" in A
-   169 				        ; Assumtions: A contains the hex value of the number to print
-   170
-   171 307E			        .proc printDecimal
-   172 307E A2 00		        ldx #0
-   173 3080			checkCount:
-   174 				        ; if A < 10   → carry = 0  → bcc branches   (carry CLEAR)
-   175 				        ; if A >= 10  → carry = 1  → bcs branches   (carry SET)
-   176 3080 C9 0A		        cmp #10             ; Does A = 10?
-   177 3082 90 07		        bcc doneCounting    ; branch if carry is cleared
-   178 3084 38			        sec                 ; set carry
-   179 3085 E9 0A		        sbc #10             ; A = A - 10
-   180 3087 E8			        inx                 ; X = X + 1
-   181 3088 4C 80 30		        jmp checkCount
-   182
-   183 308B			doneCounting:   
-   184 308B 48			        pha                 ; push(A) (push A onto the stack)
-   185 308C 8A			        txa                 ; A = X
-   186 308D 18			        clc
-   187 308E 69 30		        adc #offset_to_char
-   188 3090 20 73 30		        jsr putchar
-   189
-   190 3093 68			        pla                 ; A = pop() (pop the next value off the stack)
-   191 3094 18			        clc 
-   192 3095 69 30		        adc #offset_to_char
-   193 3097 20 73 30		        jsr putchar
-   194 				        .endp
-   195 				;==================================================================================================
-   196
-   197 				; plot a point (x,y)
-   198 				; Step 1: Find which ROW we're on
-   199 				;        plotY × 40 = how many bytes to skip to reach our row
-   200 				;        (each row is 40 bytes wide)
-   201 				;        2^3 + 2^2
-   202 				; Step 2: Find which BYTE within that row
-   203 				;        plotX ÷ 8 = which byte contains our pixel
-   204 				;        (each byte holds 8 pixels)
-   205 				;
-   206 				; Step 3: Add them together
-   207 				;        (plotY × 40) + (plotX ÷ 8) = total byte offset from start of screen RAM
-   208 				;
-   209 				; Step 4: Add SAVMSC
-   210 				;        SAVMSC + offset = actual address in memory of our byte
-   211 				;
-   212 				; Step 5: Find which BIT within that byte
-   213 				;        7 - (plotX mod 8) = which bit is our pixel
-   214 				;
-   215 				; Step 6: Set that bit
-   216 				;        read the byte
-   217 				;        OR with our bit mask
-   218 				;        write the byte back
-   219 				;
-   220 309A			        .proc plotPoint
-   221
-   222 				        ; see multiplyingYby40.txt for full breakdown with an example!
-   223
-   224 				        ; defeat attract mode on every plot
-   225 309A A9 00 85 4D		        mva #0    ATRACT
-   226 309E A9 FF 85 4E		        mva #$FF  ATRMSK
-   227
-   228 				        ; Step 1: Find which ROW we're on
-   229 30A2 A5 82		        lda plotY
-   230 30A4 85 83		        sta temp_lo         ; temp = plotY
-   231 30A6 A9 00		        lda #0
-   232 30A8 85 84		        sta temp_hi         ; high byte starts at 0
-   233
-   234 				        ; × 2
-   235 30AA 06 83		        asl temp_lo         ; shift temp_lo to the left one bit
-   236 30AC 26 84		        rol temp_hi         ; shift temp_hi to the left one bit and include the carry 
-   237
-   238 				        ; × 4
-   239 30AE 06 83		        asl temp_lo
-   240 30B0 26 84		        rol temp_hi
-   241
-   242 				        ; × 8  ← save this!
-   243 30B2 06 83		        asl temp_lo
-   244 30B4 26 84		        rol temp_hi
-   245 30B6 A5 83		        lda temp_lo
-   246 30B8 85 87		        sta save_lo
-   247 30BA A5 84		        lda temp_hi
-   248 30BC 85 88		        sta save_hi
-   249
-   250 				        ; × 16
-   251 30BE 06 83		        asl temp_lo
-   252 30C0 26 84		        rol temp_hi
-   253
-   254 				        ; × 32
-   255 30C2 06 83		        asl temp_lo
-   256 30C4 26 84		        rol temp_hi
-   257
-   258 30C6 A5 83		        lda temp_lo         ; A = temp_lo    (low byte of plotY × 32)
-   259 30C8 18			        clc                 ; clear carry
-   260 30C9 65 87		        adc save_lo         ; A = temp_lo + save_lo  (add plotY × 8)
-   261 30CB 85 83		        sta temp_lo         ; temp_lo = low byte of plotY × 40
+   105 				; Step 3: Setup color registers
+   106 				; change COLPF1 to change pixel color
+   107
+   108 304A A9 1E 8D C5 02	        mva #$1E  $02C5     ; COLPF1 = yellow (foreground - pixel color)
+   109 304F A9 00 8D C6 02	        mva #$00  $02C6     ; COLPF2 = black (background)
+   110 3054 A9 00 8D C8 02	        mva #$00  $02C8     ; COLBK  = black (border)
+   111
+   112 3059 60			        rts
+   113 				        .endp
+   114
+   115 				;=========================================================================================
+   116 				; draw a line using Bresenham's algorithm
+   117
+   118 305A			        .proc drawLine
+   119
+   120 				        ; first step, compute:
+   121 				        ; dx = x2 - x1    (16-bit subtraction)
+   122 				        ; dy = y2 - y1    (8-bit subtraction)
+   123
+   124 305A A5 92		        lda y2          ; A = Y2
+   125 305C 38			        sec             ; set carry
+   126 305D E5 8F		        sbc y1          ; A = A - Y1
+   127 305F 85 95		        sta dy          ; dy = A
+   128
+   129 3061 A5 90		        lda x2          ; A = x2 (low byte)
+   130 3063 38			        sec             ; set carry
+   131 3064 E5 8D		        sbc x1          ; A = A - X1 (low byte)
+   132 3066 85 93		        sta dx_lo       ; save low byte, but do not re-set carry
+   133
+   134 3068 A5 91		        lda x2_hi       ; A = X2 (high byte)
+   135 306A E5 8E		        sbc x1_hi       ; A = A - X1 (high byte)
+   136 306C 85 94		        sta dx_hi       ; save high byte
+   137
+   138 				        ; check for vertical line (dx = 0)
+   139 306E A5 93		        lda dx_lo
+   140 3070 05 94		        ora dx_hi       ; OR low and high bytes together
+   141 3072 D0 33		        bne not_vertical ; if result != 0, not vertical
+   142
+   143 				        ; handle vertical line
+   144 				        ; initialize position first!
+   145 3074 A5 8D		        lda x1
+   146 3076 85 80		        sta plotX_lo
+   147 3078 A5 8E		        lda x1_hi
+   148 307A 85 81		        sta plotX_hi
+   149 307C A5 8F		        lda y1
+   150 307E 85 82		        sta plotY
+   151
+   152 				        ; just loop Y from y1 to y2
+   153 3080			vertical_loop:
+   154 3080 A5 80		        lda plotX_lo    ; save plotX before plotPoint destroys it
+   155 3082 48			        pha
+   156 3083 A5 81		        lda plotX_hi
+   157 3085 48			        pha
+   158 				        
+   159 3086 20 54 31		        jsr plotPoint
+   160 				        
+   161 3089 68			        pla             ; restore plotX
+   162 308A 85 81		        sta plotX_hi
+   163 308C 68			        pla
+   164 308D 85 80		        sta plotX_lo
+   165 				        
+   166 308F E6 82		        inc plotY
+   167 3091 A5 82		        lda plotY
+   168 3093 C5 92		        cmp y2
+   169 3095 D0 E9		        bne vertical_loop
+   170 				        
+   171 				        ; plot final point
+   172 3097 A5 80		        lda plotX_lo
+   173 3099 48			        pha
+   174 309A A5 81		        lda plotX_hi
+   175 309C 48			        pha
+   176 309D 20 54 31		        jsr plotPoint
+   177 30A0 68			        pla
+   178 30A1 85 81		        sta plotX_hi
+   179 30A3 68			        pla
+   180 30A4 85 80		        sta plotX_lo
+   181 				        
+   182 30A6 60			        rts
+   183
+   184 30A7			not_vertical:
+   185 				        ; continue with normal Bresenham...
+   186
+   187 				        ; initialize current position to start point
+   188 30A7 A5 8D		        lda x1          ; A = X1
+   189 30A9 85 80		        sta plotX_lo    ; plotX_lo = A
+   190 30AB A5 8E		        lda x1_hi       ; A = X1_hi
+   191 30AD 85 81		        sta plotX_hi    ; plotX_hi = A
+   192 30AF A5 8F		        lda y1          ; A = Y1
+   193 30B1 85 82		        sta plotY       ; plotY = A
+   194
+   195 				        ; initialize error to 0
+   196 30B3 A9 00 85 96		        mva #0 err_lo           ; err_lo = 0
+   197 30B7 A9 00 85 97		        mva #0 err_hi           ; err_hi = 0
+   198
+   199 30BB			lineloop:
+   200 				        ; save plotX before plotPoint destroys it
+   201 30BB A5 80		        lda plotX_lo
+   202 30BD 48			        pha
+   203 30BE A5 81		        lda plotX_hi
+   204 30C0 48			        pha
+   205
+   206 30C1 20 54 31		        jsr plotPoint
+   207
+   208 				        ; restore plotX after plotPoint
+   209 30C4 68			        pla
+   210 30C5 85 81		        sta plotX_hi
+   211 30C7 68			        pla
+   212 30C8 85 80		        sta plotX_lo
+   213
+   214 				; add dy to error accumulator (16-bit + 8-bit addition)
+   215 30CA A5 96		        lda err_lo              ; A = err_lo
+   216 30CC 18			        clc                     ; clear carry
+   217 30CD 65 95		        adc dy                  ; A += dy
+   218 30CF 85 96		        sta err_lo              ; err_lo = A
+   219 30D1 A5 97		        lda err_hi              ; A = err_hi
+   220 30D3 69 00		        adc #0                  ; propagate carry trick. if the carry was set it gets added to the high byte
+   221 30D5 85 97		        sta err_hi              ; err_hi = A
+   222
+   223 				        ; check if error * 2 >= dx
+   224 				        ; compute error + error (16-bit)
+   225 30D7 A5 96		        lda err_lo              ; A = err_lo
+   226 30D9 18			        clc                     ; clear carry
+   227 30DA 65 96		        adc err_lo              ; A += err_lo (err_lo * 2)
+   228 30DC 85 83		        sta temp_lo             ; temp_lo = A
+   229 30DE A5 97		        lda err_hi              ; A = err_hi
+   230 30E0 65 97		        adc err_hi              ; A += err_hi ((err_hi * 2) + carry)
+   231 30E2 85 84		        sta temp_hi             ; temp_hi = A
+   232
+   233 				        ; compare temp (error*2) to dx
+   234 				        ; 16-bit comparison: check high byte first, then low byte
+   235 30E4 A5 84		        lda temp_hi     ; A = temp_hi
+   236 30E6 C5 94		        cmp dx_hi       ; Does temp_hi == dx_hi? 
+   237 30E8 90 17		        bcc skip_y      ; temp_hi < dx_hi, no Y step needed (branch if carry is clear)
+   238 30EA D0 06		        bne do_y_step   ; temp_hi > dx_hi, Y step needed (branch if not equal)
+   239 30EC A5 83		        lda temp_lo     ; A = temp_lo (high bytes equal, check low bytes (if we got here, high bytes are equal))
+   240 30EE C5 93		        cmp dx_lo       ; Does temp_lo == dx_lo?
+   241 30F0 90 0F		        bcc skip_y      ; temp_lo < dx_lo, no Y step needed
+   242
+   243 30F2			do_y_step:
+   244 30F2 E6 82		        inc plotY       ; y = y + 1
+   245
+   246 				        ; error = error - dx (16-bit subtraction)
+   247 30F4 A5 96		        lda err_lo      ; A = err_lo
+   248 30F6 38			        sec             ; set the carry
+   249 30F7 E5 93		        sbc dx_lo       ; A -= dx_lo
+   250 30F9 85 96		        sta err_lo      ; err_lo = A
+   251 30FB A5 97		        lda err_hi      ; A = err_hi
+   252 30FD E5 94		        sbc dx_hi       ; A -= dex_hi
+   253 30FF 85 97		        sta err_hi      ; err_hi = A
+   254
+   255 3101			skip_y:
+   256 				        ; advance x (16-bit increment)
+   257 3101 E6 80		        inc plotX_lo            ; plotX_lo++
+   258 3103 D0 02		        bne lineloop_check      ; if no overflow, check if done 
+   259 				                                ; if plotX_lo != 0 JUMP FORWARD to lineloop_check
+   260 3105 E6 81		        inc plotX_hi            ; handle overflow from low to high byte
+   261 				                                ; only reaches here if plotX_lo overflowed to 0
    262
-   263 30CD A5 84		        lda temp_hi         ; A = temp_hi    (high byte of plotY × 32)
-   264 30CF 65 88		        adc save_hi         ; A = temp_hi + save_hi + carry  (add high bytes)
-   265 30D1 85 84		        sta temp_hi         ; temp_hi = high byte of plotY × 40
-   266 				        ; we now have the offset to our target row in temp_lo and temp_hi
-   267
-   268 				        ; calculate which bit 
-   269 30D3 A5 80		        lda plotX_lo
-   270 30D5 29 07		        and #%00000111      ; mask bottom 3 bits = plotX mod 8
-   271 30D7 85 89		        sta bitpos          ; save for Step 5
-   272
-   273 				        ; Step 2: find offset from start of row to our pixel
-   274 				        ; plotX ÷ 8 using 16-bit right shift
-   275 				        ; ON ENTRY: plotX_hi/plotX_lo contains X coordinate (0-319)
-   276 				        ; ON EXIT:  A contains column byte offset (0-39)
-   277 30D9 46 81		        lsr plotX_hi        ; shift high byte right, bit 0 → carry
-   278 30DB 66 80		        ror plotX_lo        ; carry → bit 7 of low byte, bit 0 → carry
+   263 3107			lineloop_check:
+   264 				        ; are we done? compare plotX to x2
+   265 3107 A5 80		        lda plotX_lo            ; A = plotX_lo
+   266 3109 C5 90		        cmp x2                  ; test: A = X2 ?
+   267 310B D0 AE		        bne lineloop            ; not done, keep going
+   268 				                                ; if plotX_lo != x2 JUMP BACK to lineloop
+   269 310D A5 81		        lda plotX_hi            ; A = plotX_hi
+   270 310F C5 91		        cmp x2_hi               ; test: A = x2_hi ?
+   271 3111 D0 A8		        bne lineloop            ; not done, keep going
+   272 				                                ; if plotX_hi != x2_hi JUMP BACK to lineloop
+   273 				                                ; if both match we fall through - done!
+   274
+   275 				        
+   276
+   277 3113 60			        rts
+   278 				        .endp
    279
-   280 30DD 46 81		        lsr plotX_hi        ; shift again
-   281 30DF 66 80		        ror plotX_lo
-   282
-   283 30E1 46 81		        lsr plotX_hi        ; shift again
-   284 30E3 66 80		        ror plotX_lo        ; plotX_lo now contains plotX ÷ 8
-   285
-   286 				        ; Step 3: add results from step 1 and 2 together
-   287 30E5 A5 83		        lda temp_lo
-   288 30E7 18			        clc
-   289 30E8 65 80		        adc plotX_lo
-   290 30EA 85 83		        sta temp_lo
-   291
-   292 30EC A5 84		        lda temp_hi
-   293 30EE 69 00		        adc #0
-   294 30F0 85 84		        sta temp_hi
-   295 				        ; temp now contains total byte offset from SAVMSC
-   296
-   297 				        ; Step 4: Add SAVMSC Base Address
-   298 30F2 A5 83		        lda temp_lo
-   299 30F4 18			        clc
-   300 30F5 65 58		        adc SAVMSC
-   301 30F7 85 85		        sta scrptr_lo
+   280
+   281 				;=========================================================================================
+   282 				; print a string
+   283 				; Assumptions
+   284 				; strptr_lo = low address of the string
+   285 				; strptr_hi = high address of the string
+   286 				;       together we have a 16-bit address of the string
+   287
+   288 				; Y = index of current character to process, starts at 0
+   289 				; example calling code:
+   290 				;       mva #1 csrhinh                  ; hide the cursor
+   291 				;        mva #6 rowcrs                   ; set output row
+   292 				;        mva #10 colcrs                  ; set output column
+   293 				;        
+   294 				;        mva #<string1 strptr_lo         ; low byte of string1 address
+   295 				;        mva #>string1 strptr_hi         ; high byte o f string1 address
+   296 				;        jsr print_string                ; print the string
+   297 				;
+   298 				;========= don't forget you'll need data
+   299 				;       .local string1
+   300 				;        .byte 'HELLO FROM STRING ONE!',0
+   301 				;        .endl
    302
-   303 30F9 A5 84		        lda temp_hi
-   304 30FB 65 59		        adc SAVMSC+1
-   305 30FD 85 86		        sta scrptr_hi
-   306
-   307 				        ; Step 5: find which bit to turn on
-   308 				        ; algo:  bit position = 7 - (plotX mod 8)
-   309 				        ; Step 5: find which bit to turn on
-   310 30FF A9 80		        lda #$80            ; A = %10000000  (start with bit 7)
-   311 3101 A6 89		        ldx bitpos          ; X = number of times to shift right
-   312 3103 F0 04		        beq done_shift      ; if bitpos = 0 no shifting needed!
-   313 3105			shift_loop:
-   314 3105 4A			        lsr                 ; shift A right one position
-   315 3106 CA			        dex                 ; X = X - 1
-   316 3107 D0 FC		        bne shift_loop      ; if X != 0 keep shifting
-   317 3109			done_shift:
-   318 				                            ; A now contains our bit mask
-   319
-   320 				        ; Step 6: turn on our bit!!
-   321 3109 85 8A		        sta bitmask             ; save mask
-   322 310B A0 00		        ldy #0                  ; Y = 0 for indirect indexed addressing
-   323 310D B1 85		        lda (scrptr_lo),y       ; read current byte from screen RAM
-   324 310F 05 8A		        ora bitmask             ; OR with our bit mask (sets our pixel bit)
-   325 3111 91 85		        sta (scrptr_lo),y       ; write modified byte back to screen RAM
-   326
-   327 3113 60			        rts
-   328 				        .endp
-   329 				;======================================================================
-   330
-   331 				; =====================================================================
-   332 				; DATA
-   333 				; =====================================================================
-   334 3114 53 3A 9B		scrname .byte 'S:',$9B             ; device name string for CIO OPEN
-   335 				                                    ; 'S:' = screen device
-   336 				                                    ; $9B  = ATASCII end-of-line terminator
+   303 				;======================================================================
+   304 3114			        .proc print_string
+   305 3114 A0 00		        ldy #0
+   306 3116			loop:
+   307 3116 B1 8B		        lda (strptr_lo),y               ; with an offset of Y bytes, grab the byte at the 16-bit address
+   308 3118 C9 00		        cmp #0                          ; test if we found the 0 string terminator: A == 0?   
+   309 311A F0 0D		        beq exit                        ; if true, branch to exit
+   310 311C 98			        tya                             ; A = Y
+   311 311D 48			        pha                             ; push A onto the stack
+   312 311E B1 8B		        lda (strptr_lo),y               ; re-fetch current byte of string
+   313 3120 20 2D 31		        jsr putchar                     ; call putchar to write a character out
+   314 3123 68			        pla                             ; A = pop stack
+   315 3124 A8			        tay                             ; Y = A
+   316 3125 C8			        iny                             ; Y = Y + 1
+   317 3126 4C 16 31		        jmp loop                        ; GOTO loop
+   318 3129			exit:
+   319 3129 60			        rts                             ; exit subroutine
+   320 				        .endp
+   321
+   322 312A			stop:
+   323 312A 4C 2A 31		        jmp stop                        ; GOTO stop                   (infinite loop = program halts here)
+   324 				;======================================================================
+   325
+   326 				; print a character
+   327 				; Assumptions
+   328 				; 1. the character is in register A
+   329 				; 2. the character has been converted to ATASCII
+   330 				; 3. before calling, save values of X and Y registers
+   331
+   332 312D			        .proc putchar
+   333 312D AA			        tax             ; X = A                       (save character from A into X because A is about to be clobbered)
+   334 312E AD 47 03		        lda putchar_ptr+1 ; A = memory[$347]          (load high byte of OS print routine address)
+   335 3131 48			        pha             ; push A onto stack            (high byte on stack, will be popped second by rts)
+   336 3132 AD 46 03		        lda putchar_ptr ; A = memory[$346]            (load low byte of OS print routine address)
+   337 3135 48			        pha             ; push A onto stack            (low byte on stack, will be popped first by rts)
+   338 3136 8A			        txa             ; A = X                       (restore original character back into A because OS print routine expects character value in A)
+   339 3137 60			        rts             ; RETURN                      (pops OS address from stack and jumps there, OS prints character in A, then returns to main)
+   340 				        .endp           ; end of putchar procedure
+   341
+   342 				;========================================================================================
+   343 				        ; print both digits in base 10, from left to right
+   344 				        ; strategy is to continue subracting 10 from our hex value until it is less than 10
+   345 				        ; once we are there we now have the "tens digit" in X and the "ones digit" in A
+   346 				        ; Assumtions: A contains the hex value of the number to print
+   347
+   348 3138			        .proc printDecimal
+   349 3138 A2 00		        ldx #0
+   350 313A			checkCount:
+   351 				        ; if A < 10   → carry = 0  → bcc branches   (carry CLEAR)
+   352 				        ; if A >= 10  → carry = 1  → bcs branches   (carry SET)
+   353 313A C9 0A		        cmp #10             ; Does A = 10?
+   354 313C 90 07		        bcc doneCounting    ; branch if carry is cleared
+   355 313E 38			        sec                 ; set carry
+   356 313F E9 0A		        sbc #10             ; A = A - 10
+   357 3141 E8			        inx                 ; X = X + 1
+   358 3142 4C 3A 31		        jmp checkCount
+   359
+   360 3145			doneCounting:   
+   361 3145 48			        pha                 ; push(A) (push A onto the stack)
+   362 3146 8A			        txa                 ; A = X
+   363 3147 18			        clc
+   364 3148 69 30		        adc #offset_to_char
+   365 314A 20 2D 31		        jsr putchar
+   366
+   367 314D 68			        pla                 ; A = pop() (pop the next value off the stack)
+   368 314E 18			        clc 
+   369 314F 69 30		        adc #offset_to_char
+   370 3151 20 2D 31		        jsr putchar
+   371 				        .endp
+   372 				;==================================================================================================
+   373
+   374 				; plot a point (x,y)
+   375 				; Step 1: Find which ROW we're on
+   376 				;        plotY × 40 = how many bytes to skip to reach our row
+   377 				;        (each row is 40 bytes wide)
+   378 				;        2^3 + 2^2
+   379 				; Step 2: Find which BYTE within that row
+   380 				;        plotX ÷ 8 = which byte contains our pixel
+   381 				;        (each byte holds 8 pixels)
+   382 				;
+   383 				; Step 3: Add them together
+   384 				;        (plotY × 40) + (plotX ÷ 8) = total byte offset from start of screen RAM
+   385 				;
+   386 				; Step 4: Add SAVMSC
+   387 				;        SAVMSC + offset = actual address in memory of our byte
+   388 				;
+   389 				; Step 5: Find which BIT within that byte
+   390 				;        7 - (plotX mod 8) = which bit is our pixel
+   391 				;
+   392 				; Step 6: Set that bit
+   393 				;        read the byte
+   394 				;        OR with our bit mask
+   395 				;        write the byte back
+   396 				;
+   397 3154			        .proc plotPoint
+   398
+   399 				        ; see multiplyingYby40.txt for full breakdown with an example!
+   400
+   401 				        ; defeat attract mode on every plot
+   402 3154 A9 00 85 4D		        mva #0    ATRACT
+   403 3158 A9 FF 85 4E		        mva #$FF  ATRMSK
+   404
+   405 				        ; Step 1: Find which ROW we're on
+   406 315C A5 82		        lda plotY
+   407 315E 85 83		        sta temp_lo         ; temp = plotY
+   408 3160 A9 00		        lda #0
+   409 3162 85 84		        sta temp_hi         ; high byte starts at 0
+   410
+   411 				        ; × 2
+   412 3164 06 83		        asl temp_lo         ; shift temp_lo to the left one bit
+   413 3166 26 84		        rol temp_hi         ; shift temp_hi to the left one bit and include the carry 
+   414
+   415 				        ; × 4
+   416 3168 06 83		        asl temp_lo
+   417 316A 26 84		        rol temp_hi
+   418
+   419 				        ; × 8  ← save this!
+   420 316C 06 83		        asl temp_lo
+   421 316E 26 84		        rol temp_hi
+   422 3170 A5 83		        lda temp_lo
+   423 3172 85 87		        sta save_lo
+   424 3174 A5 84		        lda temp_hi
+   425 3176 85 88		        sta save_hi
+   426
+   427 				        ; × 16
+   428 3178 06 83		        asl temp_lo
+   429 317A 26 84		        rol temp_hi
+   430
+   431 				        ; × 32
+   432 317C 06 83		        asl temp_lo
+   433 317E 26 84		        rol temp_hi
+   434
+   435 3180 A5 83		        lda temp_lo         ; A = temp_lo    (low byte of plotY × 32)
+   436 3182 18			        clc                 ; clear carry
+   437 3183 65 87		        adc save_lo         ; A = temp_lo + save_lo  (add plotY × 8)
+   438 3185 85 83		        sta temp_lo         ; temp_lo = low byte of plotY × 40
+   439
+   440 3187 A5 84		        lda temp_hi         ; A = temp_hi    (high byte of plotY × 32)
+   441 3189 65 88		        adc save_hi         ; A = temp_hi + save_hi + carry  (add high bytes)
+   442 318B 85 84		        sta temp_hi         ; temp_hi = high byte of plotY × 40
+   443 				        ; we now have the offset to our target row in temp_lo and temp_hi
+   444
+   445 				        ; calculate which bit 
+   446 318D A5 80		        lda plotX_lo
+   447 318F 29 07		        and #%00000111      ; mask bottom 3 bits = plotX mod 8
+   448 3191 85 89		        sta bitpos          ; save for Step 5
+   449
+   450 				        ; Step 2: find offset from start of row to our pixel
+   451 				        ; plotX ÷ 8 using 16-bit right shift
+   452 				        ; ON ENTRY: plotX_hi/plotX_lo contains X coordinate (0-319)
+   453 				        ; ON EXIT:  A contains column byte offset (0-39)
+   454 3193 46 81		        lsr plotX_hi        ; shift high byte right, bit 0 → carry
+   455 3195 66 80		        ror plotX_lo        ; carry → bit 7 of low byte, bit 0 → carry
+   456
+   457 3197 46 81		        lsr plotX_hi        ; shift again
+   458 3199 66 80		        ror plotX_lo
+   459
+   460 319B 46 81		        lsr plotX_hi        ; shift again
+   461 319D 66 80		        ror plotX_lo        ; plotX_lo now contains plotX ÷ 8
+   462
+   463 				        ; Step 3: add results from step 1 and 2 together
+   464 319F A5 83		        lda temp_lo
+   465 31A1 18			        clc
+   466 31A2 65 80		        adc plotX_lo
+   467 31A4 85 83		        sta temp_lo
+   468
+   469 31A6 A5 84		        lda temp_hi
+   470 31A8 69 00		        adc #0
+   471 31AA 85 84		        sta temp_hi
+   472 				        ; temp now contains total byte offset from SAVMSC
+   473
+   474 				        ; Step 4: Add SAVMSC Base Address
+   475 31AC A5 83		        lda temp_lo
+   476 31AE 18			        clc
+   477 31AF 65 58		        adc SAVMSC
+   478 31B1 85 85		        sta scrptr_lo
+   479
+   480 31B3 A5 84		        lda temp_hi
+   481 31B5 65 59		        adc SAVMSC+1
+   482 31B7 85 86		        sta scrptr_hi
+   483
+   484 				        ; Step 5: find which bit to turn on
+   485 				        ; algo:  bit position = 7 - (plotX mod 8)
+   486 				        ; Step 5: find which bit to turn on
+   487 31B9 A9 80		        lda #$80            ; A = %10000000  (start with bit 7)
+   488 31BB A6 89		        ldx bitpos          ; X = number of times to shift right
+   489 31BD F0 04		        beq done_shift      ; if bitpos = 0 no shifting needed!
+   490 31BF			shift_loop:
+   491 31BF 4A			        lsr                 ; shift A right one position
+   492 31C0 CA			        dex                 ; X = X - 1
+   493 31C1 D0 FC		        bne shift_loop      ; if X != 0 keep shifting
+   494 31C3			done_shift:
+   495 				                            ; A now contains our bit mask
+   496
+   497 				        ; Step 6: turn on our bit!!
+   498 31C3 85 8A		        sta bitmask             ; save mask
+   499 31C5 A0 00		        ldy #0                  ; Y = 0 for indirect indexed addressing
+   500 31C7 B1 85		        lda (scrptr_lo),y       ; read current byte from screen RAM
+   501 31C9 05 8A		        ora bitmask             ; OR with our bit mask (sets our pixel bit)
+   502 31CB 91 85		        sta (scrptr_lo),y       ; write modified byte back to screen RAM
+   503
+   504 31CD 60			        rts
+   505 				        .endp
+   506 				;======================================================================
+   507
+   508 				; =====================================================================
+   509 				; DATA
+   510 				; =====================================================================
+   511 31CE 53 3A 9B		scrname .byte 'S:',$9B             ; device name string for CIO OPEN
+   512 				                                    ; 'S:' = screen device
+   513 				                                    ; $9B  = ATASCII end-of-line terminator
      3
-     4 3117			        org $2000
+     4 31D1			        org $2000
      5
      6 2000			        .proc main
      7 				    
@@ -435,48 +626,60 @@ Source: routines.asm
     23 				; draw pixels example
     24 				;======================================================
     25
-    26 2000-2047> 20 22 30	        jsr openGR8
+    26 2000-2077> 20 22 30	        jsr openGR8
     27
     28 2003 20 09 30		        jsr clearScreen
     29
-    30 				        ; upper left
-    31 2006 A9 00 85 80		        mva #0    plotX_lo
-    32 200A A9 00 85 81		        mva #0    plotX_hi
-    33 200E A9 00 85 82		        mva #0    plotY
-    34 2012 20 9A 30		        jsr plotPoint
-    35
-    36 				        ; upper right
-    37 2015 A9 3F 85 80		        mva #$3F  plotX_lo
-    38 2019 A9 01 85 81		        mva #$01  plotX_hi
-    39 201D A9 00 85 82		        mva #0    plotY
-    40 2021 20 9A 30		        jsr plotPoint
-    41
-    42 				        ; lower left
-    43 2024 A9 00 85 80		        mva #0    plotX_lo
-    44 2028 A9 00 85 81		        mva #0    plotX_hi
-    45 202C A9 BF 85 82		        mva #191  plotY
-    46 2030 20 9A 30		        jsr plotPoint
+    30 				         ; top edge
+    31 2006 A9 00 85 8D		        mva #0    x1
+    32 200A A9 00 85 8E		        mva #0    x1_hi
+    33 200E A9 00 85 8F		        mva #0    y1
+    34 2012 A9 3F 85 90		        mva #$3F  x2
+    35 2016 A9 01 85 91		        mva #$01  x2_hi
+    36 201A A9 00 85 92		        mva #0    y2
+    37 201E 20 5A 30		        jsr drawLine
+    38
+    39 				        ; bottom edge
+    40 2021 A9 00 85 8D		        mva #0    x1
+    41 2025 A9 00 85 8E		        mva #0    x1_hi
+    42 2029 A9 BF 85 8F		        mva #191  y1
+    43 202D A9 3F 85 90		        mva #$3F  x2
+    44 2031 A9 01 85 91		        mva #$01  x2_hi
+    45 2035 A9 BF 85 92		        mva #191  y2
+    46 2039 20 5A 30		        jsr drawLine
     47
-    48 				        ; lower right
-    49 2033 A9 3F 85 80		        mva #$3F  plotX_lo
-    50 2037 A9 01 85 81		        mva #$01  plotX_hi
-    51 203B A9 BF 85 82		        mva #191  plotY
-    52 203F 20 9A 30		        jsr plotPoint
-    53
-    54
-    55 2042			halt:
-    56 2042 20 00 30		        jsr fightAttract
-    57 2045 4C 42 20		        jmp halt
-    58
-    59
-    60 				        .endp
-    61
-    62 				;===================================================================
-    63 				; Data section
-    64 				;===================================================================
-    65 				        ;.local string1
-    66 				        ;.byte 'HELLO FROM STRING ONE!',0
-    67 				        ;.endl
-    68
-    69
-    70 02E0-02E1> 00 20		        run main
+    48 				        ; left edge
+    49 203C A9 00 85 8D		        mva #0    x1
+    50 2040 A9 00 85 8E		        mva #0    x1_hi
+    51 2044 A9 00 85 8F		        mva #0    y1
+    52 2048 A9 00 85 90		        mva #0    x2
+    53 204C A9 00 85 91		        mva #0    x2_hi
+    54 2050 A9 BF 85 92		        mva #191  y2
+    55 2054 20 5A 30		        jsr drawLine
+    56
+    57 				        ; right edge
+    58 2057 A9 3F 85 8D		        mva #$3F  x1
+    59 205B A9 01 85 8E		        mva #$01  x1_hi
+    60 205F A9 00 85 8F		        mva #0    y1
+    61 2063 A9 3F 85 90		        mva #$3F  x2
+    62 2067 A9 01 85 91		        mva #$01  x2_hi
+    63 206B A9 BF 85 92		        mva #191  y2
+    64 206F 20 5A 30		        jsr drawLine
+    65
+    66
+    67 2072			halt:
+    68 2072 20 00 30		        jsr fightAttract
+    69 2075 4C 72 20		        jmp halt
+    70
+    71
+    72 				        .endp
+    73
+    74 				;===================================================================
+    75 				; Data section
+    76 				;===================================================================
+    77 				        ;.local string1
+    78 				        ;.byte 'HELLO FROM STRING ONE!',0
+    79 				        ;.endl
+    80
+    81
+    82 02E0-02E1> 00 20		        run main
