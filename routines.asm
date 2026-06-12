@@ -2,6 +2,187 @@
         org $3000               ; routines live at $3000
 
 
+;=========================================================================================
+; draw a circle using Bresenham's circle algorithm
+; ON ENTRY: cx/cx_hi = center X, cy = center Y, radius = radius
+; ON EXIT:  circle drawn on screen
+
+        .proc drawCircle
+
+        ; initialize error term: cerr = 1 - radius
+        lda #1
+        sec
+        sbc radius
+        sta cerr_lo
+        lda #0
+        sbc #0
+        sta cerr_hi
+
+        ; initialize offsets
+        mva #0  circX       ; circX = 0
+        lda radius
+        sta circY           ; circY = radius
+
+circleloop:
+
+        ; plot point 1: (cx + circX, cy + circY)
+        lda cx
+        clc
+        adc circX
+        sta plotX_lo
+        lda cx_hi
+        adc #0
+        sta plotX_hi
+        lda cy
+        clc
+        adc circY
+        sta plotY
+        jsr plotPoint
+
+        ; plot point 2: (cx - circX, cy + circY)
+        lda cx
+        sec
+        sbc circX
+        sta plotX_lo
+        lda cx_hi
+        sbc #0
+        sta plotX_hi
+        lda cy
+        clc
+        adc circY
+        sta plotY
+        jsr plotPoint
+
+        ; plot point 3: (cx + circX, cy - circY)
+        lda cx
+        clc
+        adc circX
+        sta plotX_lo
+        lda cx_hi
+        adc #0
+        sta plotX_hi
+        lda cy
+        sec
+        sbc circY
+        sta plotY
+        jsr plotPoint
+
+        ; plot point 4: (cx - circX, cy - circY)
+        lda cx
+        sec
+        sbc circX
+        sta plotX_lo
+        lda cx_hi
+        sbc #0
+        sta plotX_hi
+        lda cy
+        sec
+        sbc circY
+        sta plotY
+        jsr plotPoint
+
+        ; plot point 5: (cx + circY, cy + circX)
+        lda cx
+        clc
+        adc circY
+        sta plotX_lo
+        lda cx_hi
+        adc #0
+        sta plotX_hi
+        lda cy
+        clc
+        adc circX
+        sta plotY
+        jsr plotPoint
+
+        ; plot point 6: (cx - circY, cy + circX)
+        lda cx
+        sec
+        sbc circY
+        sta plotX_lo
+        lda cx_hi
+        sbc #0
+        sta plotX_hi
+        lda cy
+        clc
+        adc circX
+        sta plotY
+        jsr plotPoint
+
+        ; plot point 7: (cx + circY, cy - circX)
+        lda cx
+        clc
+        adc circY
+        sta plotX_lo
+        lda cx_hi
+        adc #0
+        sta plotX_hi
+        lda cy
+        sec
+        sbc circX
+        sta plotY
+        jsr plotPoint
+
+        ; plot point 8: (cx - circY, cy - circX)
+        lda cx
+        sec
+        sbc circY
+        sta plotX_lo
+        lda cx_hi
+        sbc #0
+        sta plotX_hi
+        lda cy
+        sec
+        sbc circX
+        sta plotY
+        jsr plotPoint
+
+        ; advance circX
+        inc circX
+
+        ; check sign of cerr
+        lda cerr_hi
+        bmi update_negative     ; cerr < 0
+
+        ; positive path: cerr >= 0
+        dec circY               ; circY = circY - 1
+        lda circX
+        sec
+        sbc circY               ; A = circX - circY
+        asl                     ; A = 2*(circX-circY)
+        clc
+        adc #1                  ; A = 2*(circX-circY) + 1
+        clc
+        adc cerr_lo
+        sta cerr_lo
+        lda cerr_hi
+        adc #0
+        sta cerr_hi
+        jmp check_done          ; skip negative path
+
+update_negative:
+        ; negative path: cerr < 0
+        lda circX
+        asl                     ; A = 2*circX
+        clc
+        adc #1                  ; A = 2*circX + 1
+        clc
+        adc cerr_lo
+        sta cerr_lo
+        lda cerr_hi
+        adc #0
+        sta cerr_hi
+                                ; fall through to check_done
+
+check_done:
+        lda circX
+        cmp circY
+        bcc keep_going      ; circX < circY — short forward branch
+        beq keep_going      ; circX = circY — short forward branch
+        rts                 ; circX > circY — done!
+keep_going:
+        jmp circleloop      ; jump back — unlimited range
+        .endp
 
 
 ; =====================================================================

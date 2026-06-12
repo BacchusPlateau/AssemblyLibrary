@@ -27,7 +27,7 @@
 
         jsr clearScreen
 
-         ; top edge
+       ; top edge
         mva #0    x1
         mva #0    x1_hi
         mva #0    y1
@@ -63,11 +63,15 @@
         mva #191  y2
         jsr drawLine
 
+        mva #160  cx
+        mva #0    cx_hi
+        mva #96   cy
+        mva #50   radius
+        jsr drawCircle
 
 halt:
         jsr fightAttract
         jmp halt
-
 
         .endp
 

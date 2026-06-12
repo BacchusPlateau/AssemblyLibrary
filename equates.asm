@@ -34,6 +34,16 @@ dy      = $95       ; delta Y
 err_lo  = $96       ; error accumulator low byte
 err_hi  = $97       ; error accumulator high byte
 
+; drawCircle variables
+cx      = $9B       ; center X low byte
+cx_hi   = $9C       ; center X high byte
+cy      = $9D       ; center Y
+radius  = $9E       ; circle radius
+circX   = $9F       ; current x offset (starts at 0)
+circY   = $A0       ; current y offset (starts at radius)
+cerr_lo = $A1       ; error term low byte (signed)
+cerr_hi = $A2       ; error term high byte
+
 
 ; GR.8 color registers
 COLPF1  = $02C5     ; foreground pixel color shadow
