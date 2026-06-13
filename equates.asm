@@ -44,6 +44,10 @@ circY   = $A0       ; current y offset (starts at radius)
 cerr_lo = $A1       ; error term low byte (signed)
 cerr_hi = $A2       ; error term high byte
 
+; print16bit variables
+p16_val_lo  = $A3       ; 16-bit value to print low byte
+p16_val_hi  = $A4       ; 16-bit value to print high byte
+p16_digit   = $A5       ; current digit counter
 
 ; GR.8 color registers
 COLPF1  = $02C5     ; foreground pixel color shadow

@@ -23,51 +23,71 @@
 ; draw pixels example
 ;======================================================
 
-        jsr openGR8
+       ;jsr openGR8
 
-        jsr clearScreen
+       ;jsr clearScreen
 
        ; top edge
-        mva #0    x1
-        mva #0    x1_hi
-        mva #0    y1
-        mva #$3F  x2
-        mva #$01  x2_hi
-        mva #0    y2
-        jsr drawLine
+        ;mva #0    x1
+        ;mva #0    x1_hi
+        ;mva #0    y1
+        ;mva #$3F  x2
+        ;mva #$01  x2_hi
+        ;mva #0    y2
+        ;jsr drawLine
 
         ; bottom edge
-        mva #0    x1
-        mva #0    x1_hi
-        mva #191  y1
-        mva #$3F  x2
-        mva #$01  x2_hi
-        mva #191  y2
-        jsr drawLine
+        ;mva #0    x1
+        ;mva #0    x1_hi
+        ;mva #191  y1
+        ;mva #$3F  x2
+        ;mva #$01  x2_hi
+        ;mva #191  y2
+        ;jsr drawLine
 
         ; left edge
-        mva #0    x1
-        mva #0    x1_hi
-        mva #0    y1
-        mva #0    x2
-        mva #0    x2_hi
-        mva #191  y2
-        jsr drawLine
+        ;mva #0    x1
+        ;mva #0    x1_hi
+        ;mva #0    y1
+        ;mva #0    x2
+        ;mva #0    x2_hi
+        ;mva #191  y2
+        ;jsr drawLine
 
         ; right edge
-        mva #$3F  x1
-        mva #$01  x1_hi
-        mva #0    y1
-        mva #$3F  x2
-        mva #$01  x2_hi
-        mva #191  y2
-        jsr drawLine
+        ;mva #$3F  x1
+        ;mva #$01  x1_hi
+        ;mva #0    y1
+        ;mva #$3F  x2
+        ;mva #$01  x2_hi
+        ;mva #191  y2
+        ;jsr drawLine
 
-        mva #160  cx
-        mva #0    cx_hi
-        mva #96   cy
-        mva #50   radius
-        jsr drawCircle
+        ;mva #160  cx
+        ;mva #0    cx_hi
+        ;mva #96   cy
+        ;mva #50   radius
+        ;jsr drawCircle
+
+;===================================================================
+; print 16-bit integer example
+        mva #1 csrhinh
+        mva #6 rowcrs
+        mva #10 colcrs
+        lda #$20            ; space
+        jsr putchar         ; this triggers cursor hide BEFORE printDecimal runs
+        
+        mva #$10 p16_val_lo
+        mva #$27 p16_val_hi
+
+        jsr printBigDecimal
+
+        ;hide cursor at (0,0)
+        mva #0  rowcrs
+        mva #0  colcrs
+        lda #$20
+
+;===================================================================
 
 halt:
         jsr fightAttract

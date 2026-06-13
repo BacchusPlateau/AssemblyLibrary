@@ -37,7 +37,16 @@ circleloop:
         clc
         adc circY
         sta plotY
+
+        lda plotX_lo
+        pha
+        lda plotX_hi
+        pha
         jsr plotPoint
+        pla
+        sta plotX_hi
+        pla
+        sta plotX_lo
 
         ; plot point 2: (cx - circX, cy + circY)
         lda cx
@@ -51,7 +60,16 @@ circleloop:
         clc
         adc circY
         sta plotY
+
+        lda plotX_lo
+        pha
+        lda plotX_hi
+        pha
         jsr plotPoint
+        pla
+        sta plotX_hi
+        pla
+        sta plotX_lo
 
         ; plot point 3: (cx + circX, cy - circY)
         lda cx
@@ -65,7 +83,16 @@ circleloop:
         sec
         sbc circY
         sta plotY
+
+        lda plotX_lo
+        pha
+        lda plotX_hi
+        pha
         jsr plotPoint
+        pla
+        sta plotX_hi
+        pla
+        sta plotX_lo
 
         ; plot point 4: (cx - circX, cy - circY)
         lda cx
@@ -79,7 +106,16 @@ circleloop:
         sec
         sbc circY
         sta plotY
+
+        lda plotX_lo
+        pha
+        lda plotX_hi
+        pha
         jsr plotPoint
+        pla
+        sta plotX_hi
+        pla
+        sta plotX_lo
 
         ; plot point 5: (cx + circY, cy + circX)
         lda cx
@@ -93,7 +129,16 @@ circleloop:
         clc
         adc circX
         sta plotY
+
+        lda plotX_lo
+        pha
+        lda plotX_hi
+        pha
         jsr plotPoint
+        pla
+        sta plotX_hi
+        pla
+        sta plotX_lo
 
         ; plot point 6: (cx - circY, cy + circX)
         lda cx
@@ -107,7 +152,16 @@ circleloop:
         clc
         adc circX
         sta plotY
+
+        lda plotX_lo
+        pha
+        lda plotX_hi
+        pha
         jsr plotPoint
+        pla
+        sta plotX_hi
+        pla
+        sta plotX_lo
 
         ; plot point 7: (cx + circY, cy - circX)
         lda cx
@@ -121,7 +175,16 @@ circleloop:
         sec
         sbc circX
         sta plotY
+
+        lda plotX_lo
+        pha
+        lda plotX_hi
+        pha
         jsr plotPoint
+        pla
+        sta plotX_hi
+        pla
+        sta plotX_lo
 
         ; plot point 8: (cx - circY, cy - circX)
         lda cx
@@ -135,7 +198,16 @@ circleloop:
         sec
         sbc circX
         sta plotY
+
+        lda plotX_lo
+        pha
+        lda plotX_hi
+        pha
         jsr plotPoint
+        pla
+        sta plotX_hi
+        pla
+        sta plotX_lo
 
         ; advance circX
         inc circX
@@ -519,6 +591,148 @@ stop:
         txa             ; A = X                       (restore original character back into A because OS print routine expects character value in A)
         rts             ; RETURN                      (pops OS address from stack and jumps there, OS prints character in A, then returns to main)
         .endp           ; end of putchar procedure
+
+;========================================================================================
+;       print a 16-bit decimal
+;       ON ENTRY: p16_val_lo/p16_val_hi contains the value to print
+
+        .proc printBigDecimal
+
+        ; Ten thousands place
+        mva #0 p16_digit
+
+tenthousands:
+        ; is p16_val >= 10000?
+        lda p16_val_hi          ; A = p16_val_hi
+        cmp #$27                ; 10,000 base 10 is $2710, that's why we're comparing $27 here, the hi byte
+        bcc doneTenThousands    ; < 10000, done
+        bne do_subTenThousands  ; > 10000, subtract
+        lda p16_val_lo          ; A = p16_val_lo
+        cmp #$10                ; now we're comparing the low byte of the literal $2710 hex value
+        bcc doneTenThousands    ; = exactly check low byte
+
+do_subTenThousands:
+        ; subtract 10000 (16-bit)
+        lda p16_val_lo          ; A = p16_val_lo
+        sec                     ; set the carry
+        sbc #$10                ; A -= $10 (we are subtracting the low byte first. looks weird because it's a literal)
+        sta p16_val_lo          ; p16_val_lo = A
+        lda p16_val_hi          ; A = p16_val_hi
+        sbc #$27                ; A -= $27 (we are subtracting the high byte of $2710 or 10,000 base 10)
+        sta p16_val_hi          ; p16_val_hi = A
+        inc p16_digit           ; p16_digit++
+        jmp tenthousands        ; keep going
+
+doneTenThousands:
+        ; print the digit
+        lda p16_digit
+        clc
+        adc #offset_to_char
+        jsr putchar
+
+        ; Thousands
+        mva #0 p16_digit        ; reset our counter
+thousands:
+        ; is p16_val >= 1000?
+        lda p16_val_hi          ; A = p16_val_hi
+        cmp #$3                 ; 1000 base 10 is $03E8, that's why we're comparing $3 here, the hi byte
+        bcc doneThousands       ; < 1000, done
+        bne do_subThousands     ; > 1000, subtract
+        lda p16_val_lo          ; A = p16_val_lo
+        cmp #$E8                ; now we're comparing the low byte of the literal $03E8 hex value
+        bcc doneThousands       ; = exactly check low byte
+
+do_subThousands:
+        ; subtract 1000 (16-bit)
+        lda p16_val_lo          ; A = p16_val_lo
+        sec                     ; set the carry
+        sbc #$E8                ; A -= $E8 (we are subtracting the low byte first. looks weird because it's a literal)
+        sta p16_val_lo          ; p16_val_lo = A
+        lda p16_val_hi          ; A = p16_val_hi
+        sbc #$3                 ; A -= $3 (we are subtracting the high byte of $03E8 or 1000 base 10)
+        sta p16_val_hi          ; p16_val_hi = A
+        inc p16_digit           ; p16_digit++
+        jmp thousands           ; keep going
+
+doneThousands:
+        ; print the digit
+        lda p16_digit
+        clc
+        adc #offset_to_char
+        jsr putchar      
+
+
+        ; Hundreds
+        mva #0 p16_digit        ; reset our counter
+hundreds:
+        ; is p16_val >= 100?
+        lda p16_val_hi          ; A = p16_val_hi
+        cmp #$0                
+        bcc doneHundreds     
+        bne do_subHundreds     
+        lda p16_val_lo          ; A = p16_val_lo
+        cmp #$64              
+        bcc doneHundreds        ; = exactly check low byte
+
+do_subHundreds:
+        ; subtract 100 (16-bit)
+        lda p16_val_lo          ; A = p16_val_lo
+        sec                     ; set the carry
+        sbc #$64                ;  (we are subtracting the low byte first. looks weird because it's a literal)
+        sta p16_val_lo          ; p16_val_lo = A
+        lda p16_val_hi          ; A = p16_val_hi
+        sbc #$0                 ;  (we are subtracting the high byte of $03E8 or 1000 base 10)
+        sta p16_val_hi          ; p16_val_hi = A
+        inc p16_digit           ; p16_digit++
+        jmp hundreds           ; keep going
+
+doneHundreds:
+        ; print the digit
+        lda p16_digit
+        clc
+        adc #offset_to_char
+        jsr putchar   
+
+        ; Tens
+        mva #0 p16_digit        ; reset our counter
+tens:
+        ; is p16_val >= 10?
+        lda p16_val_hi          ; A = p16_val_hi
+        cmp #$0                
+        bcc doneTens     
+        bne do_subTens     
+        lda p16_val_lo          ; A = p16_val_lo
+        cmp #$0A              
+        bcc doneTens        ; = exactly check low byte
+
+do_subTens:
+        ; subtract 100 (16-bit)
+        lda p16_val_lo          ; A = p16_val_lo
+        sec                     ; set the carry
+        sbc #$0A                ;  (we are subtracting the low byte first. looks weird because it's a literal)
+        sta p16_val_lo          ; p16_val_lo = A
+        lda p16_val_hi          ; A = p16_val_hi
+        sbc #$0                 ;  (we are subtracting the high byte of $03E8 or 1000 base 10)
+        sta p16_val_hi          ; p16_val_hi = A
+        inc p16_digit           ; p16_digit++
+        jmp tens           ; keep going
+
+doneTens:
+        ; print the digit
+        lda p16_digit
+        clc
+        adc #offset_to_char
+        jsr putchar
+
+        ; ones are whatever is left in p16_val_lo
+        lda p16_val_lo
+        clc
+        adc #offset_to_char
+        jsr putchar
+
+        rts
+        .endp
+
 
 ;========================================================================================
         ; print both digits in base 10, from left to right
