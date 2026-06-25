@@ -1,6 +1,486 @@
 ; routines.asm
         org $3000               ; routines live at $3000
 
+shipSprite
+        .byte $00,$00
+        .byte $00,$00
+        .byte $00,$00
+        .byte $01,$80
+        .byte $02,$20
+        .byte $04,$10
+        .byte $3F,$FC
+        .byte $16,$24
+        .byte $0F,$F8
+        .byte $03,$E0
+        .byte $00,$00
+        .byte $00,$00
+
+;=========================================================================================
+; draw a sprite
+; Assumptions: caller sets spritePtr_lo/spritePtr_hi 
+;       (and presumably baseX_lo/baseX_hi/baseY) before calling
+;
+; spritePtr = address of shipSprite
+; row = 0
+; for byteIndex = 0 to 23:
+;    spriteByte = read byte at spritePtr, advance spritePtr
+;    columnBase = (byteIndex mod 2) * 8        ; 0 for even bytes, 8 for odd bytes
+;    mask = %10000000
+;    for bitCounter = 0 to 7:
+;        if spriteByte AND mask != 0:
+;            plotX = baseX + columnBase + bitCounter
+;            plotY = baseY + row
+;            plotPoint
+;        mask = mask >> 1
+;    if byteIndex is odd:
+;        row = row + 1
+.proc drawSprite
+
+        lda spritePtr_lo
+        pha
+        lda spritePtr_hi
+        pha
+
+        mva #0 spriteRow
+        mva #0 byteCount
+        mva #0 columnBase
+
+spriteloop:
+        ldy #0
+        lda (spritePtr_lo),y
+        sta spriteByte
+
+        mva #%10000000 spriteMask
+        mva #0 bitCounter
+
+bittest:
+        lda spriteByte
+        and spriteMask
+        beq skipbit
+
+        lda baseX_lo
+        clc
+        adc columnBase
+        clc
+        adc bitCounter
+        sta plotX_lo
+        lda baseX_hi
+        adc #0
+        sta plotX_hi
+
+        lda baseY
+        clc
+        adc spriteRow
+        sta plotY
+
+        jsr plotPoint
+
+skipbit:
+        lsr spriteMask
+        inc bitCounter
+        lda bitCounter
+        cmp #8
+        bne bittest
+
+        inc spritePtr_lo
+        bne noCarry
+        inc spritePtr_hi
+noCarry:
+        lda columnBase
+        beq setTo8
+        mva #0 columnBase
+        inc spriteRow
+        jmp afterToggle
+setTo8:
+        mva #8 columnBase
+afterToggle:
+
+        inc byteCount
+        lda byteCount
+        cmp #24
+        bne spriteloop
+
+        pla
+        sta spritePtr_hi
+        pla
+        sta spritePtr_lo
+
+        rts
+        .endp
+
+
+
+;=========================================================================
+; drawSpriteSolo - Preserved for all the great comments.
+;
+; Draws a 16-pixel-wide, 12-row-tall sprite (the spaceship "Beowulf")
+; from a packed bitmap table in memory, onto the GR.8 screen.
+;
+; The sprite data is stored as 24 bytes total: each row of the sprite
+; is 16 pixels wide, which needs 2 bytes per row (8 bits per byte),
+; and there are 12 rows, so 2 bytes × 12 rows = 24 bytes.
+;
+; ON ENTRY: spritePtr_lo/spritePtr_hi point to the start of the sprite
+;           bitmap data (24 consecutive bytes)
+;           baseX_lo/baseX_hi = screen X coordinate of the sprite's
+;           top-left corner (16-bit, since X can go up to 319)
+;           baseY = screen Y coordinate of the sprite's top-left corner
+; ON EXIT:  every "1" bit in the sprite data has been plotted as a
+;           pixel on screen at the correct offset from (baseX, baseY)
+;=========================================================================
+        .proc drawSpriteSolo
+
+        mva #0 spriteRow       ; spriteRow = 0 — tracks which row of the
+                                ; sprite (0-11) we're currently drawing
+        mva #0 byteCount       ; byteCount = 0 — tracks how many of the
+                                ; 24 total sprite bytes we've processed
+        mva #0 columnBase      ; columnBase = 0 — tracks whether we're in
+                                ; the LEFT half (0-7) or RIGHT half (8-15)
+                                ; of the current row, since each row needs
+                                ; two bytes (left byte then right byte)
+
+;-------------------------------------------------------------------------
+; Outer loop: process one byte of sprite data per pass.
+; Each byte represents 8 horizontal pixels (1 bit = 1 pixel).
+;-------------------------------------------------------------------------
+spriteloop:
+        ldy #0                          ; Y = 0 (offset for indirect read)
+        lda (spritePtr_lo),y             ; A = memory[spritePtr + Y]
+                                        ; fetch the current sprite byte
+                                        ; using our 16-bit pointer
+        sta spriteByte                  ; save it — we'll be testing each
+                                        ; bit of it one at a time below
+
+        mva #%10000000 spriteMask       ; spriteMask = %10000000
+                                        ; start by testing the LEFTMOST
+                                        ; bit (bit 7) of this byte first
+        mva #0 bitCounter               ; bitCounter = 0 — tracks which of
+                                        ; the 8 bits within this byte
+                                        ; we're currently testing (0-7)
+
+;-------------------------------------------------------------------------
+; Inner loop: test each of the 8 bits in the current sprite byte.
+; If a bit is "1" we plot a pixel there; if "0" we skip it (background).
+;-------------------------------------------------------------------------
+bittest:
+        lda spriteByte                  ; A = the sprite byte we saved
+        and spriteMask                  ; A = A AND spriteMask
+                                        ; isolates just the one bit we
+                                        ; care about this pass — result
+                                        ; is 0 if that bit was clear,
+                                        ; non-zero if that bit was set
+        beq skipbit                     ; if the bit was 0 (background),
+                                        ; skip plotting and move on
+
+        ; --- this bit is "1" — calculate where on screen it belongs ---
+
+        ; plotX = baseX + columnBase + bitCounter  (16-bit safe addition)
+        ; columnBase shifts us into the left (0) or right (8) half of
+        ; the row, and bitCounter adds the specific pixel offset (0-7)
+        ; within that half — together they give the pixel's column
+        ; position relative to the sprite's top-left corner.
+        lda baseX_lo                    ; A = low byte of sprite's base X
+        clc                             ; clear carry before first add
+        adc columnBase                  ; A += columnBase (0 or 8)
+        clc                             ; clear carry again — columnBase
+                                        ; and bitCounter are both small
+                                        ; values (0-15) so we re-clear
+                                        ; to be explicit/safe before the
+                                        ; second addition
+        adc bitCounter                  ; A += bitCounter (0-7)
+        sta plotX_lo                    ; plotX_lo = final low byte
+        lda baseX_hi                    ; A = high byte of sprite's base X
+        adc #0                          ; propagate any carry from the
+                                        ; low byte additions above into
+                                        ; the high byte (16-bit safe)
+        sta plotX_hi                    ; plotX_hi = final high byte
+
+        ; plotY = baseY + spriteRow
+        ; simple 8-bit addition since Y only ranges 0-191 on screen
+        lda baseY                       ; A = sprite's base Y coordinate
+        clc                             ; clear carry before adding
+        adc spriteRow                   ; A += spriteRow (0-11)
+        sta plotY                       ; plotY = final row position
+
+        ; plotPoint destroys plotX_lo/plotX_hi during its internal
+        ; division — but we don't need those values again until we
+        ; recalculate them fresh on the next bit, so no save/restore
+        ; is needed here (unlike in drawLine where we reused plotX
+        ; across iterations without recalculating it each time)
+        jsr plotPoint                   ; plot this single pixel!
+
+skipbit:
+        lsr spriteMask                  ; shift the mask right one
+                                        ; position — moves us from
+                                        ; testing bit 7 down to bit 6,
+                                        ; then bit 5, etc. on later passes
+        inc bitCounter                  ; bitCounter++ — advance to the
+                                        ; next pixel position (0 through 7)
+        lda bitCounter
+        cmp #8                          ; have we tested all 8 bits in
+                                        ; this byte yet?
+        bne bittest                     ; no — go test the next bit
+
+;-------------------------------------------------------------------------
+; Finished all 8 bits of the current byte. Advance to the next byte
+; in the sprite data, and figure out whether that next byte is the
+; right half of the SAME row, or the left half of the NEXT row.
+;-------------------------------------------------------------------------
+
+        ; advance the 16-bit sprite data pointer to the next byte
+        inc spritePtr_lo
+        bne noCarry                     ; if low byte didn't wrap to 0,
+                                        ; no need to touch the high byte
+        inc spritePtr_hi                ; low byte wrapped — carry into
+                                        ; the high byte (16-bit increment)
+noCarry:
+        ; columnBase toggles between 0 and 8 each time we finish a byte.
+        ; Since each row is 16 pixels wide but each byte only covers 8
+        ; pixels, every row needs exactly TWO bytes: one for columns
+        ; 0-7 (columnBase=0) and one for columns 8-15 (columnBase=8).
+        lda columnBase
+        beq setTo8                      ; if columnBase was 0 (we just
+                                        ; finished the LEFT half), switch
+                                        ; to 8 for the RIGHT half next
+        ; columnBase was 8 — we just finished the RIGHT half of a row,
+        ; meaning the entire row (both bytes) is now complete.
+        mva #0 columnBase                ; reset columnBase back to 0
+                                        ; for the start of the next row
+        inc spriteRow                   ; spriteRow++ — move down to the
+                                        ; next row of the sprite
+        jmp afterToggle
+setTo8:
+        mva #8 columnBase                ; switch to the right half (8-15)
+                                        ; of the CURRENT row — spriteRow
+                                        ; does NOT increment here since
+                                        ; we're still on the same row
+afterToggle:
+
+        inc byteCount                    ; byteCount++ — one more of the
+                                        ; 24 total sprite bytes processed
+        lda byteCount
+        cmp #24                          ; have we processed all 24 bytes
+                                        ; (2 bytes × 12 rows) yet?
+        bne spriteloop                   ; no — go process the next byte
+
+        rts                              ; yes — the entire sprite has
+                                        ; been drawn, return to caller
+        .endp
+
+;=========================================================================================
+.proc eraseSprite
+
+        ; save the caller's original spritePtr — see drawSprite for
+        ; why this matters (pointer would otherwise drift forward
+        ; by 24 bytes every call)
+        lda spritePtr_lo
+        pha
+        lda spritePtr_hi
+        pha
+
+        mva #0 spriteRow
+        mva #0 byteCount
+        mva #0 columnBase
+
+eraseloop:
+        ldy #0
+        lda (spritePtr_lo),y
+        sta spriteByte
+
+        mva #%10000000 spriteMask
+        mva #0 bitCounter
+
+erasebittest:
+        lda spriteByte
+        and spriteMask
+        beq eraseskipbit
+
+        lda baseX_lo
+        clc
+        adc columnBase
+        clc
+        adc bitCounter
+        sta plotX_lo
+        lda baseX_hi
+        adc #0
+        sta plotX_hi
+
+        lda baseY
+        clc
+        adc spriteRow
+        sta plotY
+
+        jsr erasePoint
+
+eraseskipbit:
+        lsr spriteMask
+        inc bitCounter
+        lda bitCounter
+        cmp #8
+        bne erasebittest
+
+        inc spritePtr_lo
+        bne eraseNoCarry
+        inc spritePtr_hi
+eraseNoCarry:
+        lda columnBase
+        beq eraseSetTo8
+        mva #0 columnBase
+        inc spriteRow
+        jmp eraseAfterToggle
+eraseSetTo8:
+        mva #8 columnBase
+eraseAfterToggle:
+
+        inc byteCount
+        lda byteCount
+        cmp #24
+        bne eraseloop
+
+        ; restore spritePtr to its starting value before returning
+        pla
+        sta spritePtr_hi
+        pla
+        sta spritePtr_lo
+
+        rts
+        .endp
+
+
+;=========================================================================
+; erasePoint
+; Clears (turns OFF) a single pixel in GR.8 screen RAM, at the position
+; given by plotX_lo/plotX_hi and plotY. This is the exact mirror of
+; plotPoint — same six steps to locate the byte and bit — except the
+; final step CLEARS the bit instead of SETTING it.
+; ON ENTRY: plotX_lo/plotX_hi/plotY contain the pixel coordinates
+; ON EXIT:  the corresponding screen RAM bit is cleared to 0 (background)
+;           NOTE: just like plotPoint, this destroys plotX_lo/plotX_hi!
+;=========================================================================
+        .proc erasePoint
+
+        ; defeat attract mode on every erase, same as plotPoint does
+        mva #0    ATRACT
+        mva #$FF  ATRMSK
+
+        ; Step 1: Find which ROW we're on  (plotY × 40)
+        lda plotY
+        sta temp_lo
+        lda #0
+        sta temp_hi
+
+        asl temp_lo
+        rol temp_hi
+
+        asl temp_lo
+        rol temp_hi
+
+        asl temp_lo
+        rol temp_hi
+        lda temp_lo
+        sta save_lo
+        lda temp_hi
+        sta save_hi
+
+        asl temp_lo
+        rol temp_hi
+
+        asl temp_lo
+        rol temp_hi
+
+        lda temp_lo
+        clc
+        adc save_lo
+        sta temp_lo
+
+        lda temp_hi
+        adc save_hi
+        sta temp_hi
+
+        ; calculate which bit (plotX mod 8)
+        lda plotX_lo
+        and #%00000111
+        sta bitpos
+
+        ; Step 2: plotX ÷ 8 using 16-bit right shift
+        lsr plotX_hi
+        ror plotX_lo
+
+        lsr plotX_hi
+        ror plotX_lo
+
+        lsr plotX_hi
+        ror plotX_lo
+
+        ; Step 3: add row offset + column offset
+        lda temp_lo
+        clc
+        adc plotX_lo
+        sta temp_lo
+
+        lda temp_hi
+        adc #0
+        sta temp_hi
+
+        ; Step 4: Add SAVMSC Base Address
+        lda temp_lo
+        clc
+        adc SAVMSC
+        sta scrptr_lo
+
+        lda temp_hi
+        adc SAVMSC+1
+        sta scrptr_hi
+
+        ; Step 5: find which bit to turn off
+        lda #$80
+        ldx bitpos
+        beq done_shift
+shift_loop_erase:
+        lsr
+        dex
+        bne shift_loop_erase
+done_shift:
+
+        ; Step 6: turn OFF our bit (the only step that differs from
+        ; plotPoint!) — invert the mask so every bit is 1 EXCEPT
+        ; our target pixel, then AND it against the screen byte to
+        ; clear just that one bit while leaving all others untouched
+        eor #$FF                ; invert: our bit is now 0, rest are 1
+        sta bitmask              ; save the inverted mask
+        ldy #0
+        lda (scrptr_lo),y        ; read current byte from screen RAM
+        and bitmask               ; AND clears just our bit
+        sta (scrptr_lo),y        ; write modified byte back
+
+        rts
+        .endp
+
+;=========================================================================
+; waitFrames
+; Pauses execution for a given number of vertical blank frames.
+; On PAL the frame counter at $14 increments roughly 50 times per
+; second; on NTSC it's roughly 60 times per second. The OS updates
+; this counter automatically during every VBI, completely independent
+; of our code — so we just watch it change.
+; ON ENTRY: X contains the number of frames to wait
+; ON EXIT:  approximately X/50 seconds (PAL) have elapsed
+;=========================================================================
+        .proc waitFrames
+
+waitOneFrame:
+        lda $14                 ; A = current frame counter value
+holdFrame:
+        cmp $14                 ; has the counter changed yet?
+        beq holdFrame           ; no — keep checking (busy-wait)
+                                ; yes — one full frame has now elapsed
+
+        dex                     ; X = X - 1 (one frame counted off)
+        bne waitOneFrame        ; more frames to wait? go again
+
+        rts
+        .endp
+
 
 ;=========================================================================================
 ; draw a circle using Bresenham's circle algorithm

@@ -5,9 +5,6 @@ rowcrs      = $54                       ; CONSTANT: rowcrs = $54 (OS zero page a
 colcrs      = $55                       ; CONSTANT: colcrs = $55 (OS zero page address that controls cursor column)
 offset_to_char = $30                    ; Offset from integer literal to ATASCII character equivalent of the number
 
-strptr_lo   = $8B                       ; low byte of string address
-strptr_hi   = $8C                       ; high byte of string address
-
 ; graphics variables and constants
 plotX_lo    = $80       ; low byte of X coordinate (0-319 needs 2 bytes!)
 plotX_hi    = $81       ; high byte of X coordinate
@@ -20,6 +17,9 @@ save_lo     = $87       ; saved plotY × 8 low byte
 save_hi     = $88       ; saved plotY × 8 high byte
 bitpos      = $89       ; bit position within byte (plotX mod 8) that our pixel lives in
 bitmask     = $8A       ; save our mask that we will use to turn ONLY our pixel on
+
+strptr_lo   = $8B                       ; low byte of string address
+strptr_hi   = $8C                       ; high byte of string address
 
 ; drawLine variables
 x1      = $8D       ; start X low byte
@@ -53,6 +53,18 @@ p16_digit   = $A5       ; current digit counter
 COLPF1  = $02C5     ; foreground pixel color shadow
 COLPF2  = $02C6     ; background color shadow
 COLBK   = $02C8     ; border color shadow
+
+spritePtr_lo = $A6      ; pointer into sprite data, advances each byte
+spritePtr_hi = $A7
+spriteByte   = $A8      ; current byte being tested
+spriteMask   = $A9      ; current bit mask (shifts right each test)
+spriteRow    = $AA      ; current row (0-11)
+columnBase   = $AB      ; 0 or 8 depending on which byte in the row
+byteCount    = $AC      ; 0-23, total byte counter
+baseX_lo     = $AD      ; ship's starting X (saved so we can recompute each pixel)
+baseX_hi     = $AE
+baseY        = $AF      ; ship's starting Y
+bitCounter   = $B0
 
 ; =====================================================================
 ; CIO (Central I/O) constants
