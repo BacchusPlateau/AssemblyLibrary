@@ -1379,7 +1379,39 @@ done_shift:
 
         rts
         .endp
+
+
 ;======================================================================
+; printArray
+; Assumptions:
+;       name of array is Numbers
+;       x1 is used to hold x while we are printing
+
+        .proc printArray
+
+        ldx #0                          ; x = 0
+print_array_loop:
+        txa                             ; a = x
+        sta x1                          ; save x to x1 via a
+        lda numbers,x                   ; a = numbers[x]
+        
+        jsr printDecimal                ; print a
+        lda #$9B                        ; a = newline character
+        jsr putchar                     ; print a
+
+        lda x1                          ; a = x1 (restoring x)
+        tax                             ; x = a
+        inx                             ; x++
+        cpx #.len numbers               ; is x == len(numbers)?
+        bne print_array_loop            ; "branch if zero flag is clear" 
+
+        lda #$9B                        ; a = newline character
+        jsr putchar                     ; print a
+
+        rts
+        .endp
+
+
 
 ; =====================================================================
 ; DATA
