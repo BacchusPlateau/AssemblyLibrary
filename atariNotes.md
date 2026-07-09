@@ -134,3 +134,132 @@ refreshes PMG registers internally), initPMG.
   different rendering approaches, not interchangeable.
 
 
+# Session additions — joystick input & missile graphics
+
+Written to match the style of `atariNotes.md`. Intended to be merged into
+that file's existing sections (or appended as new ones) — not a
+replacement.
+
+## Joystick input
+- `STICK0` (`$0278`) and `STRIG0` (`$0284`) are OS shadow RAM, already
+  debounced every frame — no need to touch the PIA hardware directly.
+- Both are **active LOW**: `0` = pressed, `1` = released. Backwards from
+  intuition — comes from the physical switch-to-ground wiring, not a
+  software choice. `STICK0`'s bits: 0=Up, 1=Down, 2=Left, 3=Right.
+- Diagonals work for free — each direction is an independent bit, so
+  testing them separately (not mutually exclusive) naturally supports
+  Up+Left, Up+Right, etc. with no extra logic.
+- `STICK0`'s upper nibble belongs to joystick 2. If displaying/printing
+  the raw value, mask with `AND #%00001111` first — `printDecimal` only
+  handles two digits (0-99), and the full byte can exceed that.
+
+### Edge detection (single-shot fire button)
+Reading `STRIG0` alone only tells you "pressed right now" — not whether
+it's a *new* press. To fire once per press instead of continuously
+while held, track last frame's state and compare:
+```
+lda STRIG0
+cmp prevTrig
+beq noEdge        ; unchanged since last frame — no edge
+cmp #0            ; still pressed now?
+bne noEdge        ; changed, but to RELEASED — no fire
+; PRESS EDGE: was released last frame, is pressed now
+...
+noEdge:
+lda STRIG0        ; re-read explicitly, don't assume A survived
+sta prevTrig      ; must update EVERY pass, or edge detection breaks
+```
+- `prevTrig` must be initialized before the first loop iteration
+  (`1` = released, matching the button's true idle state) — same
+  uninitialized-zero-page trap as `shipX`/`shipY` elsewhere.
+- **Real bug hit:** `mva #1 temp_hi` (a MADS macro = `lda #1`/`sta
+  temp_hi`) between the edge check and the final `sta prevTrig`
+  silently clobbered `A`, so `prevTrig` got stored wrong ONLY on the
+  press-edge path — not the other two paths, which is why it worked in
+  isolation but fired continuously once combined with other logic.
+  Lesson: pseudo-ops like `mva`/`mwa` are real instructions with real
+  register side effects; check what they expand to before trusting a
+  register to survive across one. Altirra's syntax highlighter leaves
+  them a different color than genuine 6502 opcodes — a fast way to
+  spot which mnemonics are macros.
+
+## PMG vertical movement (applies to players AND missiles)
+- There's no `VPOSPx` register — vertical position is entirely
+  determined by which offset in PM memory you write shape data to,
+  not a hardware register like `HPOSPx`.
+- PM memory does **not** clear itself. Moving vertically without
+  erasing the old row first leaves a frozen duplicate behind — same
+  principle as `drawSprite`/`eraseSprite`'s erase-before-redraw, just
+  applied to PM memory instead of the bitmap screen.
+- Order matters: erase using the OLD Y, then update Y, then draw at
+  the NEW Y. Erasing after the Y update erases the wrong row.
+- Horizontal movement (`HPOSPx`/`HPOSMx`) is a single register for the
+  WHOLE vertical column of that Player/Missile — two shapes drawn at
+  different Y-rows of the same PM object will move together
+  horizontally, since they share one X register. (This is exactly
+  what an uninitialized-Y "ghost" looks like: fixed Y, but mirrors the
+  real object's X forever.)
+
+## Missile graphics specifics
+- All 4 missiles share ONE memory section (`$0180` within the PM
+  block, two-line resolution) — NOT separate sections like players.
+  Each byte holds all 4 missiles' pixels for that row at once, 2 bits
+  each: missile 0 = bits 0-1, missile 1 = bits 2-3, etc.
+- **The `+16` visible-playfield-top offset applies to missile memory
+  too, not just players.** Real bug: `MISSILE_BASE` was defined as
+  `PMBASE+$0180` (missing the `+16`), which put every missile row 16
+  scanlines higher than intended — invisible until something needed
+  to align precisely with a player's position (the egg spawning near
+  a specific point on the duck's body made a 16-row error obvious).
+  Correct: `MISSILE_BASE = PMBASE+$0180+16`.
+- Missile 0's 2 bits are independent pixels, not a combined value —
+  4 real states per row: `00` off, `01` right-pixel-only, `10`
+  left-pixel-only, `11` full 2px width. Tapering a shape (e.g. an egg)
+  uses the half-width states the same way the duck's beak used
+  narrower/wider player rows.
+- `SIZEM` (`$D00C`, not yet in equates.asm) scales missile width on
+  screen (normal/double/quad per De Re Atari, 2 bits per missile
+  within the byte) — separate lever from the 2-bit shape resolution
+  itself. Not yet used in this project.
+- Missiles inherit their corresponding player's color register by
+  default (missile 0 → `COLPM0`) — no independent missile color
+  without GTIA's "fifth player" mode (`PRIOR` register). Not yet
+  implemented; parked for later.
+
+## Stepped movement needs range checks, not exact-equality checks
+When something moves by more than 1 unit per step (egg speed increased
+to outrun the duck), a boundary check like `cmp #0 / beq` can be
+skipped entirely — subtracting 3 from a value of 1 never lands exactly
+on 0, it underflows past it. Fix: `cmp` + `bcc`/`bcs` (range checks:
+"less than" / "at least") instead of `beq` (exact match). Same
+category of bug as the `walkFrame` diagonal issue below — code that's
+correct at one step size can silently break at another.
+
+## Animation tied to the wrong thing
+Walk-cycle frame selection was originally keyed off `shipX`'s parity
+(even/odd), which meant vertical-only movement never flipped frames —
+the check had no way to "see" `shipY` at all. Fix: a dedicated
+`walkFrame` counter, incremented once per step that a movement
+actually happened, independent of which axis moved. Also caught: if
+multiple axes move in the same step (diagonal), incrementing the
+counter once per axis causes an even net change (`+2`) on diagonals,
+which never flips bit 0 — the fix was a single "did anything move"
+flag checked once per step, not per-axis increments.
+
+## New zero-page variables added this session
+See `equates.asm` for authoritative addresses (`$B1`-`$B9` range).
+`shipX`, `shipY`, `walkFrame`, `prevTrig`, `eggX`, `eggY`, `eggActive`,
+`lastDir`, `eggDir`.
+
+## Parked / not yet done
+- No bounds-checking on `shipX`/`shipY` (duck) or screen wraparound —
+  same gap noted for the duck since horizontal-only movement, now also
+  true for vertical.
+- Missile color is currently borrowed from `COLPM0` (shared with the
+  duck) — independent egg coloring needs the `PRIOR` 5th-player mode,
+  not yet explored.
+- `loadDuckFrame`/`eraseDuckFrame` and `loadEggFrame`/`eraseEggFrame`
+  duplicate their address-computation math — a shared subroutine could
+  factor this out, deliberately left as-is for now (clarity over DRY
+  at this stage of learning).
+- No collision detection (egg vs. anything) yet.
