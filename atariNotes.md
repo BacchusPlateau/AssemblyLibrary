@@ -17,7 +17,8 @@ No need for a separate cpx #0 after dex — the decrement itself sets the zero f
 sta numbers,x writes A into memory at numbers + X — same addressing mode you already use for reads. The mva macro can't do this; you need the explicit lda / sta pair when the destination is an indexed address.
 - Dual-index loop pattern (e.g. reverse-copy)
 When you need one index counting up and another counting down simultaneously, use X for one and Y for the other. Initialize Y to #.len array - 1 (use dey after lda #.len array / tay), then inx / dey each pass.
-
+- Use hex for 16-bit constants
+Decimal literals are fine for single-byte values (loop counters, small offsets). For anything split across _lo/_hi byte pairs, always use hex — $012C makes the high/low split obvious at a glance, whereas 300 requires mental conversion before you can safely assign the two bytes.
 
 ### Every .proc needs an explicit `rts`
 Without it, execution falls through into whatever code follows in
