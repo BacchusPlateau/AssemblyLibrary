@@ -11,6 +11,8 @@
 ## Core gotchas (hard-won, easy to forget)
 - dex/dey/inx/iny set the zero flag automatically
 No need for a separate cpx #0 after dex — the decrement itself sets the zero flag if the result is zero. So dex / bne loop is the idiomatic pattern: "decrement and keep looping if not zero yet." Same applies to dey, inx, iny, inc, dec, and most arithmetic/logic instructions. The exceptions are store instructions (sta, stx, sty) and branch instructions — those don't touch flags.
+- Dead code from guaranteed branches
+After a bcc/bcs/beq/bne, the flags tell you what's guaranteed to be true on fall-through. If a subsequent branch is always taken because the condition is guaranteed, it's redundant — replace with jmp or just fall through. Labels with nothing referencing them can be deleted too.
 - MADS .len operator
 .len numbers evaluates to the byte count of a data table at assembly time. Use it in cpx #.len numbers as your loop termination condition so you never have to hardcode or manually count array lengths. If you add or remove values from the table later, the loop automatically adjusts.
 - sta supports indexed addressing just like lda
